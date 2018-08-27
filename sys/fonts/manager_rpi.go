@@ -1,5 +1,3 @@
-// +build rpi
-
 /*
   Go Language Raspberry Pi Interface
   (c) Copyright David Thorpe 2016-2018
@@ -9,7 +7,7 @@
   For Licensing and Usage information, please see LICENSE.md
 */
 
-package rpi
+package fonts
 
 import (
 	"fmt"
@@ -17,6 +15,7 @@ import (
 	"sync"
 	"unsafe"
 
+	// Frameworks
 	"github.com/djthorpe/gopi"
 )
 
@@ -42,9 +41,9 @@ type FontManager struct {
 type manager struct {
 	log                 gopi.Logger
 	root_path           string
-	lock                sync.Mutex
 	library             ftLibrary
 	major, minor, patch ftInt
+	sync.Mutex
 }
 
 type face struct {
@@ -183,7 +182,7 @@ const (
 // OPEN AND CLOSE
 
 func (config FontManager) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<sys.font.rpi.FontManager.Open>{ root_path=%v }", config.RootPath)
+	log.Debug("<graphics.fonts.Open>{ root_path=%v }", config.RootPath)
 	if config.RootPath != "" {
 		if stat, err := os.Stat(config.RootPath); os.IsNotExist(err) || stat.IsDir() == false {
 			return nil, gopi.ErrBadParameter
@@ -195,8 +194,8 @@ func (config FontManager) Open(log gopi.Logger) (gopi.Driver, error) {
 	this.log = log
 	this.root_path = config.RootPath
 
-	this.lock.Lock()
-	defer this.lock.Unlock()
+	this.Lock()
+	defer this.Unlock()
 
 	if library, err := ftInit(); err != FT_SUCCESS {
 		return nil, os.NewSyscallError("ftInit", err)
@@ -210,10 +209,10 @@ func (config FontManager) Open(log gopi.Logger) (gopi.Driver, error) {
 }
 
 func (this *manager) Close() error {
-	this.log.Debug("<sys.font.rpi.FontManager.Close>{ handle=0x%X }", this.library)
+	this.log.Debug("<graphics.fonts.Close>{ handle=0x%X }", this.library)
 
-	this.lock.Lock()
-	defer this.lock.Unlock()
+	this.Lock()
+	defer this.Unlock()
 
 	if this.library == FT_NO_LIBRARY {
 		return nil
@@ -230,7 +229,7 @@ func (this *manager) Close() error {
 // STRINGIFY
 
 func (this *manager) String() string {
-	return fmt.Sprintf("<sys.font.rpi.FontManager>{ handle=0x%X version={%v,%v,%v} }", this.library, this.major, this.minor, this.patch)
+	return fmt.Sprintf("<graphics.fonts.FontManager>{ handle=0x%X version={%v,%v,%v} }", this.library, this.major, this.minor, this.patch)
 }
 
 func (e ftError) Error() string {
@@ -430,7 +429,7 @@ func (this *manager) OpenFace(path string) (gopi.FontFace, error) {
 }
 
 func (this *manager) OpenFaceAtIndex(path string, index uint) (gopi.FontFace, error) {
-	this.log.Debug2("<sys.font.rpi.FontManager.OpenFaceAtIndex{ path=%v index=%v }", path, index)
+	this.log.Debug2("<graphics.fonts.OpenFaceAtIndex{ path=%v index=%v }", path, index)
 	return nil, gopi.ErrNotImplemented
 }
 
