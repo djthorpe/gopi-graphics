@@ -7,7 +7,7 @@
   For Licensing and Usage information, please see LICENSE.md
 */
 
-package surface
+package rpi
 
 import (
 	"unsafe"
@@ -27,22 +27,23 @@ import "C"
 // TYPES
 
 type (
-	eglDisplay           C.EGLDisplay
-	eglSurface           C.EGLSurface
-	eglNativeDisplayType C.EGLNativeDisplayType
-	eglBoolean           C.EGLBoolean
-	eglInt               C.EGLint
-	eglError             C.EGLint
-	eglConfig            uintptr
-	eglConfigAttrib      C.EGLint
-	eglAPI               C.EGLenum
-	eglRenderableType    C.EGLint
-	eglSurfaceType       C.EGLint
+	EGLDisplay           C.EGLDisplay
+	EGLSurface           C.EGLSurface
+	EGLNativeDisplayType C.EGLNativeDisplayType
+	EGLBoolean           C.EGLBoolean
+	EGLInt               C.EGLint
+	EGLError             C.EGLint
+	EGLAPI               C.EGLenum
+	EGLRenderableType    C.EGLint
+	EGLSurfaceType       C.EGLint
+
+	eglConfig       uintptr
+	eglConfigAttrib C.EGLint
 )
 
 // Native window structure
-type eglNativeWindowType struct {
-	// TODO	element dxElement
+type EGLNativeWindowType struct {
+	// TODO	element DXElement
 	width  int
 	height int
 }
@@ -51,8 +52,8 @@ type eglNativeWindowType struct {
 // CONSTANTS
 
 const (
-	EGL_FALSE = eglBoolean(0)
-	EGL_TRUE  = eglBoolean(1)
+	EGL_FALSE = EGLBoolean(0)
+	EGL_TRUE  = EGLBoolean(1)
 )
 
 const (
@@ -62,7 +63,7 @@ const (
 
 const (
 	// Errors
-	EGL_SUCCESS             eglError = 0x3000
+	EGL_SUCCESS             EGLError = 0x3000
 	EGL_NOT_INITIALIZED              = 0x3001
 	EGL_BAD_ACCESS                   = 0x3002
 	EGL_BAD_ALLOC                    = 0x3003
@@ -81,7 +82,7 @@ const (
 
 const (
 	// QueryString targets
-	EGL_VENDOR      eglInt = 0x3053
+	EGL_VENDOR      EGLInt = 0x3053
 	EGL_VERSION            = 0x3054
 	EGL_EXTENSIONS         = 0x3055
 	EGL_CLIENT_APIS        = 0x308D
@@ -130,14 +131,14 @@ const (
 )
 
 const (
-	EGL_OPENGL_ES_BIT  eglRenderableType = 0x0001 /* EGL_RENDERABLE_TYPE mask bits */
+	EGL_OPENGL_ES_BIT  EGLRenderableType = 0x0001 /* EGL_RENDERABLE_TYPE mask bits */
 	EGL_OPENVG_BIT                       = 0x0002 /* EGL_RENDERABLE_TYPE mask bits */
 	EGL_OPENGL_ES2_BIT                   = 0x0004 /* EGL_RENDERABLE_TYPE mask bits */
 	EGL_OPENGL_BIT                       = 0x0008 /* EGL_RENDERABLE_TYPE mask bits */
 )
 
 const (
-	EGL_PBUFFER_BIT                 eglSurfaceType = 0x0001 /* EGL_SURFACE_TYPE mask bits */
+	EGL_PBUFFER_BIT                 EGLSurfaceType = 0x0001 /* EGL_SURFACE_TYPE mask bits */
 	EGL_PIXMAP_BIT                                 = 0x0002 /* EGL_SURFACE_TYPE mask bits */
 	EGL_WINDOW_BIT                                 = 0x0004 /* EGL_SURFACE_TYPE mask bits */
 	EGL_VG_COLORSPACE_LINEAR_BIT                   = 0x0020 /* EGL_SURFACE_TYPE mask bits */
@@ -147,7 +148,7 @@ const (
 )
 
 const (
-	EGL_OPENGL_ES_API eglAPI = 0x30A0
+	EGL_OPENGL_ES_API EGLAPI = 0x30A0
 	EGL_OPENVG_API           = 0x30A1
 	EGL_OPENGL_API           = 0x30A2
 )
@@ -162,47 +163,11 @@ var (
 ////////////////////////////////////////////////////////////////////////////////
 // PRIVATE METHODS
 
-func to_eglNativeDisplayType(display uint) eglNativeDisplayType {
-	return eglNativeDisplayType(uintptr(display))
+func eglGetError() EGLError {
+	return EGLError(C.eglGetError())
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// EGL PRIVATE METHODS
-
-func eglGetError() eglError {
-	return eglError(C.eglGetError())
-}
-
-func eglInitialize(display eglDisplay) (eglInt, eglInt, eglError) {
-	var major, minor C.EGLint
-	if C.eglInitialize(C.EGLDisplay(display), (*C.EGLint)(unsafe.Pointer(&major)), (*C.EGLint)(unsafe.Pointer(&minor))) != C.EGLBoolean(EGL_TRUE) {
-		return 0, 0, eglGetError()
-	} else {
-		return eglInt(major), eglInt(minor), EGL_SUCCESS
-	}
-}
-
-func eglTerminate(display eglDisplay) eglError {
-	if C.eglTerminate(C.EGLDisplay(display)) != C.EGLBoolean(EGL_TRUE) {
-		return eglGetError()
-	} else {
-		return EGL_SUCCESS
-	}
-}
-
-func eglGetDisplay(display_id eglNativeDisplayType) (eglDisplay, eglError) {
-	if display := eglDisplay(C.eglGetDisplay(C.EGLNativeDisplayType(display_id))); display == eglDisplay(EGL_NO_DISPLAY) {
-		return display, eglGetError()
-	} else {
-		return display, EGL_SUCCESS
-	}
-}
-
-func eglQueryString(display eglDisplay, value eglInt) string {
-	return C.GoString(C.eglQueryString(C.EGLDisplay(display), C.EGLint(value)))
-}
-
-func eglGetConfigs(display eglDisplay) ([]eglConfig, eglError) {
+func eglGetConfigs(display EGLDisplay) ([]eglConfig, EGLError) {
 	var num_config C.EGLint
 	if C.eglGetConfigs(C.EGLDisplay(display), (*C.EGLConfig)(EGL_NULL_POINTER), C.EGLint(0), &num_config) != C.EGLBoolean(EGL_TRUE) {
 		return nil, eglGetError()
@@ -219,8 +184,8 @@ func eglGetConfigs(display eglDisplay) ([]eglConfig, eglError) {
 	}
 }
 
-func eglGetConfigAttribs(display eglDisplay, config eglConfig) (map[eglConfigAttrib]eglInt, eglError) {
-	attribs := make(map[eglConfigAttrib]eglInt, 0)
+func eglGetConfigAttribs(display EGLDisplay, config eglConfig) (map[eglConfigAttrib]EGLInt, EGLError) {
+	attribs := make(map[eglConfigAttrib]EGLInt, 0)
 	for k := EGL_ATTRIB_FIRST; k <= EGL_ATTRIB_MAX; k++ {
 		if v, err := eglGetConfigAttrib(display, config, k); err == EGL_BAD_ATTRIBUTE {
 			continue
@@ -233,16 +198,16 @@ func eglGetConfigAttribs(display eglDisplay, config eglConfig) (map[eglConfigAtt
 	return attribs, EGL_SUCCESS
 }
 
-func eglGetConfigAttrib(display eglDisplay, config eglConfig, attrib eglConfigAttrib) (eglInt, eglError) {
+func eglGetConfigAttrib(display EGLDisplay, config eglConfig, attrib eglConfigAttrib) (EGLInt, EGLError) {
 	var value C.EGLint
 	if C.eglGetConfigAttrib(C.EGLDisplay(display), C.EGLConfig(config), C.EGLint(attrib), &value) != C.EGLBoolean(EGL_TRUE) {
-		return eglInt(0), eglGetError()
+		return EGLInt(0), eglGetError()
 	} else {
-		return eglInt(value), EGL_SUCCESS
+		return EGLInt(value), EGL_SUCCESS
 	}
 }
 
-func eglChooseConfig(display eglDisplay, attributes map[eglConfigAttrib]eglInt) ([]eglConfig, eglError) {
+func eglChooseConfig(display EGLDisplay, attributes map[eglConfigAttrib]EGLInt) ([]eglConfig, EGLError) {
 	var num_config C.EGLint
 
 	// Make list of attributes as eglInt values
@@ -276,19 +241,55 @@ func eglChooseConfig(display eglDisplay, attributes map[eglConfigAttrib]eglInt) 
 	}
 }
 
-func eglCreateWindowSurface(display eglDisplay, config eglConfig, native eglNativeWindowType) (eglSurface, eglError) {
+////////////////////////////////////////////////////////////////////////////////
+// PUBLIC METHODS
+
+func EGLNativeDisplayTypeForDisplay(display uint) EGLNativeDisplayType {
+	return EGLNativeDisplayType(uintptr(display))
+}
+
+func EGLGetDisplay(display_id EGLNativeDisplayType) (EGLDisplay, EGLError) {
+	if display := EGLDisplay(C.eglGetDisplay(C.EGLNativeDisplayType(display_id))); display == EGLDisplay(EGL_NO_DISPLAY) {
+		return display, eglGetError()
+	} else {
+		return display, EGL_SUCCESS
+	}
+}
+
+func EGLInitialize(display EGLDisplay) (EGLInt, EGLInt, EGLError) {
+	var major, minor C.EGLint
+	if C.eglInitialize(C.EGLDisplay(display), (*C.EGLint)(unsafe.Pointer(&major)), (*C.EGLint)(unsafe.Pointer(&minor))) != C.EGLBoolean(EGL_TRUE) {
+		return 0, 0, eglGetError()
+	} else {
+		return EGLInt(major), EGLInt(minor), EGL_SUCCESS
+	}
+}
+
+func EGLTerminate(display EGLDisplay) EGLError {
+	if C.eglTerminate(C.EGLDisplay(display)) != C.EGLBoolean(EGL_TRUE) {
+		return eglGetError()
+	} else {
+		return EGL_SUCCESS
+	}
+}
+
+func EGLQueryString(display EGLDisplay, value EGLInt) string {
+	return C.GoString(C.eglQueryString(C.EGLDisplay(display), C.EGLint(value)))
+}
+
+func eglCreateWindowSurface(display EGLDisplay, config eglConfig, native EGLNativeWindowType) (EGLSurface, EGLError) {
 	return nil, EGL_BAD_SURFACE
 }
 
-func eglCreatePbufferSurface(display eglDisplay, config eglConfig, native eglNativeWindowType) (eglSurface, eglError) {
+func eglCreatePbufferSurface(display EGLDisplay, config eglConfig, native EGLNativeWindowType) (EGLSurface, EGLError) {
 	return nil, EGL_BAD_SURFACE
 }
 
-func eglCreatePixmapSurface(display eglDisplay, config eglConfig, native eglNativeWindowType) (eglSurface, eglError) {
+func eglCreatePixmapSurface(display EGLDisplay, config eglConfig, native EGLNativeWindowType) (EGLSurface, EGLError) {
 	return nil, EGL_BAD_SURFACE
 }
 
-func eglDestroySurface(display eglDisplay, surface eglSurface) eglError {
+func EGLDestroySurface(display EGLDisplay, surface EGLSurface) EGLError {
 	if C.eglDestroySurface(C.EGLDisplay(display), C.EGLSurface(surface)) != C.EGLBoolean(EGL_TRUE) {
 		return eglGetError()
 	} else {
@@ -311,11 +312,11 @@ EGLint attribute, EGLint *value);
 
 */
 
-func eglQueryAPI() eglAPI {
-	return eglAPI(C.eglQueryAPI())
+func EGLQueryAPI() EGLAPI {
+	return EGLAPI(C.eglQueryAPI())
 }
 
-func eglBindAPI(api eglAPI) eglError {
+func EGLBindAPI(api EGLAPI) EGLError {
 	if C.eglBindAPI(C.EGLenum(api)) != C.EGLBoolean(EGL_TRUE) {
 		return eglGetError()
 	} else {
@@ -326,7 +327,7 @@ func eglBindAPI(api eglAPI) eglError {
 ////////////////////////////////////////////////////////////////////////////////
 // Stringify
 
-func (e eglError) Error() string {
+func (e EGLError) Error() string {
 	switch e {
 	case EGL_SUCCESS:
 		return "EGL_SUCCESS"

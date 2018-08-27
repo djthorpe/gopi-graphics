@@ -7,12 +7,13 @@
   For Licensing and Usage information, please see LICENSE.md
 */
 
-package display
+package rpi
 
 import (
 	"fmt"
 	"unsafe"
 
+	// Frameworks
 	"github.com/djthorpe/gopi"
 )
 
@@ -29,19 +30,19 @@ import "C"
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-type dxDisplayId uint16
-type dxDisplayHandle uint32
-type dxInputFormat uint32
-type dxTransform int
+type DXDisplayId uint16
+type DXDisplayHandle uint32
+type DXInputFormat uint32
+type DXTransform int
 
-type dxDisplayModeInfo struct {
-	Size        dxSize
-	Transform   dxTransform
-	InputFormat dxInputFormat
-	Handle      dxDisplayHandle
+type DXDisplayModeInfo struct {
+	Size        DXSize
+	Transform   DXTransform
+	InputFormat DXInputFormat
+	Handle      DXDisplayHandle
 }
 
-type dxSize struct {
+type DXSize struct {
 	Width  uint32
 	Height uint32
 }
@@ -50,7 +51,7 @@ type dxSize struct {
 // CONSTANTS
 
 const (
-	DX_DISPLAY_NONE dxDisplayHandle = 0
+	DX_DISPLAY_NONE DXDisplayHandle = 0
 )
 
 const (
@@ -62,7 +63,7 @@ const (
 
 const (
 	// dxTransform values
-	DX_NO_ROTATE dxTransform = iota
+	DX_NO_ROTATE DXTransform = iota
 	DX_ROTATE_90
 	DX_ROTATE_180
 	DX_ROTATE_270
@@ -70,13 +71,13 @@ const (
 
 const (
 	// dxInputFormat values
-	DX_INPUT_FORMAT_INVALID dxInputFormat = iota
+	DX_INPUT_FORMAT_INVALID DXInputFormat = iota
 	DX_INPUT_FORMAT_RGB888
 	DX_INPUT_FORMAT_RGB565
 )
 
 const (
-	DX_ID_MAIN_LCD dxDisplayId = iota
+	DX_ID_MAIN_LCD DXDisplayId = iota
 	DX_ID_AUX_LCD
 	DX_ID_HDMI
 	DX_ID_SDTV
@@ -87,17 +88,17 @@ const (
 )
 
 ////////////////////////////////////////////////////////////////////////////////
-// PRIVATE METHODS
+// PUBLIC METHODS
 
-func dxDisplayOpen(display uint) (dxDisplayHandle, error) {
-	if handle := dxDisplayHandle(C.vc_dispmanx_display_open(C.uint32_t(display))); handle != DX_DISPLAY_NONE {
+func DXDisplayOpen(display uint) (DXDisplayHandle, error) {
+	if handle := DXDisplayHandle(C.vc_dispmanx_display_open(C.uint32_t(display))); handle != DX_DISPLAY_NONE {
 		return handle, nil
 	} else {
 		return DX_DISPLAY_NONE, gopi.ErrUnexpectedResponse
 	}
 }
 
-func dxDisplayClose(display dxDisplayHandle) error {
+func DXDisplayClose(display DXDisplayHandle) error {
 	if C.vc_dispmanx_display_close(C.DISPMANX_DISPLAY_HANDLE_T(display)) == DX_SUCCESS {
 		return nil
 	} else {
@@ -105,9 +106,9 @@ func dxDisplayClose(display dxDisplayHandle) error {
 	}
 }
 
-func dxDisplayGetInfo(display dxDisplayHandle) (*dxDisplayModeInfo, error) {
+func DXDisplayGetInfo(display DXDisplayHandle) (*DXDisplayModeInfo, error) {
 	fmt.Println("get info")
-	info := &dxDisplayModeInfo{}
+	info := &DXDisplayModeInfo{}
 	if C.vc_dispmanx_display_get_info(C.DISPMANX_DISPLAY_HANDLE_T(display), (*C.DISPMANX_MODEINFO_T)(unsafe.Pointer(info))) == DX_SUCCESS {
 		return info, nil
 	} else {
@@ -118,15 +119,15 @@ func dxDisplayGetInfo(display dxDisplayHandle) (*dxDisplayModeInfo, error) {
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
-func (this *dxDisplayModeInfo) String() string {
-	return fmt.Sprintf("dxDisplayModeInfo{ size=%v transform=%v input_format=%v }", this.Size, this.Transform, this.InputFormat)
+func (this *DXDisplayModeInfo) String() string {
+	return fmt.Sprintf("DXDisplayModeInfo{ size=%v transform=%v input_format=%v }", this.Size, this.Transform, this.InputFormat)
 }
 
-func (size dxSize) String() string {
-	return fmt.Sprintf("dxSize{%v,%v}", size.Width, size.Height)
+func (size DXSize) String() string {
+	return fmt.Sprintf("DXSize{%v,%v}", size.Width, size.Height)
 }
 
-func (t dxTransform) String() string {
+func (t DXTransform) String() string {
 	switch t {
 	case DX_NO_ROTATE:
 		return "DX_NO_ROTATE"
@@ -141,7 +142,7 @@ func (t dxTransform) String() string {
 	}
 }
 
-func (f dxInputFormat) String() string {
+func (f DXInputFormat) String() string {
 	switch f {
 	case DX_INPUT_FORMAT_RGB888:
 		return "DX_INPUT_FORMAT_RGB888"
@@ -152,7 +153,7 @@ func (f dxInputFormat) String() string {
 	}
 }
 
-func (d dxDisplayId) String() string {
+func (d DXDisplayId) String() string {
 	switch d {
 	case DX_ID_MAIN_LCD:
 		return "DX_ID_MAIN_LCD"
@@ -169,6 +170,6 @@ func (d dxDisplayId) String() string {
 	case DX_ID_FORCE_OTHER:
 		return "DX_ID_FORCE_OTHER"
 	default:
-		return "[?? Invalid dxDisplayId value]"
+		return "[?? Invalid DXDisplayId value]"
 	}
 }

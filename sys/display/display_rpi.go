@@ -13,7 +13,8 @@ import (
 	"fmt"
 
 	// Frameworks
-	"github.com/djthorpe/gopi"
+	gopi "github.com/djthorpe/gopi"
+	rpi "github.com/djthorpe/gopi-graphics/rpi"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,8 +28,8 @@ type Display struct {
 type display struct {
 	log      gopi.Logger
 	id       uint
-	handle   dxDisplayHandle
-	modeinfo *dxDisplayModeInfo
+	handle   rpi.DXDisplayHandle
+	modeinfo *rpi.DXDisplayModeInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,13 +42,13 @@ func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
 	this := new(display)
 	this.log = logger
 	this.id = config.Display
-	this.handle = DX_DISPLAY_NONE
+	this.handle = rpi.DX_DISPLAY_NONE
 
 	// Open display
 	var err error
-	if this.handle, err = dxDisplayOpen(this.id); err != nil {
+	if this.handle, err = rpi.DXDisplayOpen(this.id); err != nil {
 		return nil, err
-	} else if this.modeinfo, err = dxDisplayGetInfo(this.handle); err != nil {
+	} else if this.modeinfo, err = rpi.DXDisplayGetInfo(this.handle); err != nil {
 		return nil, err
 	}
 
@@ -59,11 +60,11 @@ func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
 func (this *display) Close() error {
 	this.log.Debug("graphics.display.Close{ id=%v }", this.id)
 
-	if this.handle != DX_DISPLAY_NONE {
-		if err := dxDisplayClose(this.handle); err != nil {
+	if this.handle != rpi.DX_DISPLAY_NONE {
+		if err := rpi.DXDisplayClose(this.handle); err != nil {
 			return err
 		} else {
-			this.handle = DX_DISPLAY_NONE
+			this.handle = rpi.DX_DISPLAY_NONE
 		}
 	}
 
@@ -91,12 +92,12 @@ func (this *display) PixelsPerInch() uint32 {
 
 // Return name of display
 func (this *display) Name() string {
-	return fmt.Sprint(dxDisplayId(this.id))
+	return fmt.Sprint(rpi.DXDisplayId(this.id))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
 func (this *display) String() string {
-	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", dxDisplayId(this.id), this.id, this.modeinfo)
+	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", rpi.DXDisplayId(this.id), this.id, this.modeinfo)
 }
