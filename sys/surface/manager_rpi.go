@@ -1,6 +1,6 @@
 /*
   Go Language Raspberry Pi Interface
-  (c) Copyright David Thorpe 2016-2017
+  (c) Copyright David Thorpe 2016-2018
   All Rights Reserved
 
   Documentation http://djthorpe.github.io/gopi/
@@ -10,13 +10,14 @@
 package surface
 
 import (
-	// Frameworks
 	"fmt"
 	"os"
 	"strings"
 	"sync"
 
+	// Frameworks
 	"github.com/djthorpe/gopi"
+	"github.com/djthorpe/gopi-graphics/rpi"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +30,7 @@ type SurfaceManager struct {
 type manager struct {
 	log          gopi.Logger
 	display      gopi.Display
-	handle       eglDisplay
+	handle       rpi.EGLDisplay
 	major, minor int
 
 	sync.Mutex
@@ -51,14 +52,13 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 	}
 
 	// Initialize EGL
-	n := to_eglNativeDisplayType(this.display.Display())
-	if handle, err := eglGetDisplay(n); err != EGL_SUCCESS {
-		return nil, os.NewSyscallError("eglGetDisplay", err)
+	if handle, err := rpi.EGLGetDisplay(rpi.EGLNativeDisplayTypeForDisplay(this.display.Display())); err != rpi.EGL_SUCCESS {
+		return nil, os.NewSyscallError("EGLGetDisplay", err)
 	} else {
 		this.handle = handle
 	}
-	if major, minor, err := eglInitialize(this.handle); err != EGL_SUCCESS {
-		return nil, os.NewSyscallError("eglInitialize", err)
+	if major, minor, err := rpi.EGLInitialize(this.handle); err != rpi.EGL_SUCCESS {
+		return nil, os.NewSyscallError("EGLInitialize", err)
 	} else {
 		this.major = int(major)
 		this.minor = int(minor)
@@ -78,13 +78,13 @@ func (this *manager) Close() error {
 	// TODO: Free Surfaces and Bitmaps
 
 	// Close EGL
-	if err := eglTerminate(this.handle); err != EGL_SUCCESS {
-		return os.NewSyscallError("Close", err)
+	if err := rpi.EGLTerminate(this.handle); err != rpi.EGL_SUCCESS {
+		return os.NewSyscallError("EGLTerminate", err)
 	}
 
 	// Blank out
 	this.display = nil
-	this.handle = eglDisplay(EGL_NO_DISPLAY)
+	this.handle = rpi.EGLDisplay(rpi.EGL_NO_DISPLAY)
 
 	return nil
 }
@@ -105,7 +105,7 @@ func (this *manager) String() string {
 
 func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
 	// check parameters
-	if this.handle == eglDisplay(EGL_NO_DISPLAY) {
+	if this.handle == rpi.EGLDisplay(rpi.EGL_NO_DISPLAY) {
 		return gopi.ErrBadParameter
 	}
 
@@ -129,11 +129,11 @@ func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
 func (this *manager) doUpdateStart() error {
 	this.Lock()
 	defer this.Unlock()
-	if this.update != dxUpdateHandle(DX_NO_UPDATE) {
+	if this.update != rpi.DXUpdateHandle(rpi.DX_NO_UPDATE) {
 		return gopi.ErrOutOfOrder
 	}
-	if update, err := dxUpdateStart(DX_UPDATE_PRIORITY_DEFAULT); err != DX_SUCCESS {
-		return os.NewSyscallError("dxUpdateStart", err)
+	if update, err := rpi.DXUpdateStart(rpi.DX_UPDATE_PRIORITY_DEFAULT); err != rpi.DX_SUCCESS {
+		return os.NewSyscallError("DXUpdateStart", err)
 	} else {
 		this.update = update
 		return nil
@@ -143,13 +143,13 @@ func (this *manager) doUpdateStart() error {
 func (this *manager) doUpdateEnd() error {
 	this.Lock()
 	defer this.Unlock()
-	if this.update == dxUpdateHandle(DX_NO_UPDATE) {
+	if this.update == rpi.DXUpdateHandle(rpi.DX_NO_UPDATE) {
 		return gopi.ErrOutOfOrder
 	}
-	if err := dxUpdateSubmitSync(this.update); err != DX_SUCCESS {
-		return os.NewSyscallError("doUpdateEnd", err)
+	if err := rpi.DXUpdateSubmitSync(this.update); err != rpi.DX_SUCCESS {
+		return os.NewSyscallError("DXUpdateSubmitSync", err)
 	} else {
-		this.update = dxUpdateHandle(DX_NO_UPDATE)
+		this.update = rpi.DXUpdateHandle(rpi.DX_NO_UPDATE)
 		return nil
 	}
 }
@@ -203,16 +203,16 @@ func (this *manager) Display() gopi.Display {
 }
 
 func (this *manager) Name() string {
-	return fmt.Sprintf("%v %v", eglQueryString(this.handle, EGL_VENDOR), eglQueryString(this.handle, EGL_VERSION))
+	return fmt.Sprintf("%v %v", rpi.EGLQueryString(this.handle, EGL_VENDOR), rpi.EGLQueryString(this.handle, EGL_VERSION))
 }
 
 func (this *manager) Extensions() []string {
-	return strings.Split(eglQueryString(this.handle, EGL_EXTENSIONS), " ")
+	return strings.Split(rpi.EGLQueryString(this.handle, rpi.EGL_EXTENSIONS), " ")
 }
 
 // Return capabilities for the GPU
 func (this *manager) Types() []gopi.SurfaceType {
-	types := strings.Split(eglQueryString(this.handle, EGL_CLIENT_APIS), " ")
+	types := strings.Split(rpi.EGLQueryString(this.handle, rpi.EGL_CLIENT_APIS), " ")
 	surface_types := make([]gopi.SurfaceType, 0, 3)
 	for _, t := range types {
 		if t2, ok := eglStringTypeMap[t]; ok {
