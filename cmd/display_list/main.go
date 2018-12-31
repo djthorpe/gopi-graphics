@@ -19,7 +19,9 @@ import (
 	"github.com/olekukonko/tablewriter"
 
 	// Modules
-	rpi "github.com/djthorpe/gopi/sys/hw/rpi"
+	display "github.com/djthorpe/gopi-graphics/sys/display"
+	_ "github.com/djthorpe/gopi-hw/sys/hw"
+	_ "github.com/djthorpe/gopi-hw/sys/metrics"
 	_ "github.com/djthorpe/gopi/sys/logger"
 )
 
@@ -33,7 +35,7 @@ func mainLoop(app *gopi.AppInstance, done chan<- struct{}) error {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Display", "Name", "Width", "height", "Pixels per inch"})
 	for n := uint(0); n < app.Hardware.NumberOfDisplays(); n++ {
-		if module, err := gopi.Open(rpi.Display{Display: n}, app.Logger); err != nil {
+		if module, err := gopi.Open(display.Display{Display: n}, app.Logger); err != nil {
 			return err
 		} else if display, ok := module.(gopi.Display); !ok {
 			module.Close()

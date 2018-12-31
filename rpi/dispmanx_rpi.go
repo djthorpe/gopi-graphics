@@ -107,7 +107,6 @@ func DXDisplayClose(display DXDisplayHandle) error {
 }
 
 func DXDisplayGetInfo(display DXDisplayHandle) (*DXDisplayModeInfo, error) {
-	fmt.Println("get info")
 	info := &DXDisplayModeInfo{}
 	if C.vc_dispmanx_display_get_info(C.DISPMANX_DISPLAY_HANDLE_T(display), (*C.DISPMANX_MODEINFO_T)(unsafe.Pointer(info))) == DX_SUCCESS {
 		return info, nil

@@ -12,6 +12,7 @@ package fonts
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"unsafe"
 
@@ -33,20 +34,19 @@ import "C"
 ////////////////////////////////////////////////////////////////////////////////
 // TYPES
 
-type FontManager struct {
-	// RootPath for relative OpenFace calls
-	RootPath string
-}
+type FontManager struct{}
 
 type manager struct {
 	log                 gopi.Logger
-	root_path           string
 	library             ftLibrary
 	major, minor, patch ftInt
+	faces               map[string]gopi.FontFace
 	sync.Mutex
 }
 
 type face struct {
+	handle C.FT_Face
+	path   string
 }
 
 type (
@@ -178,21 +178,23 @@ const (
 	FT_NO_LIBRARY = ftLibrary(0)
 )
 
+var (
+	FT_ENCODING_UNICODE = FOURCC('u', 'n', 'i', 'c')
+)
+
+func FOURCC(a, b, c, d uint8) uint32 {
+	return (uint32(d) | uint32(c)<<8 | uint32(b)<<16 | uint32(a)<<24)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
 func (config FontManager) Open(log gopi.Logger) (gopi.Driver, error) {
-	log.Debug("<graphics.fonts.Open>{ root_path=%v }", config.RootPath)
-	if config.RootPath != "" {
-		if stat, err := os.Stat(config.RootPath); os.IsNotExist(err) || stat.IsDir() == false {
-			return nil, gopi.ErrBadParameter
-		} else if err != nil {
-			return nil, err
-		}
-	}
+	log.Debug("<graphics.fonts.Open>{ }")
+
 	this := new(manager)
 	this.log = log
-	this.root_path = config.RootPath
+	this.faces = make(map[string]gopi.FontFace, 0)
 
 	this.Lock()
 	defer this.Unlock()
@@ -214,6 +216,12 @@ func (this *manager) Close() error {
 	this.Lock()
 	defer this.Unlock()
 
+	for _, face := range this.faces {
+		if err := this.DestroyFace(face); err != nil {
+			return err
+		}
+	}
+
 	if this.library == FT_NO_LIBRARY {
 		return nil
 	} else if err := ftDestroy(this.library); err != FT_SUCCESS {
@@ -229,7 +237,7 @@ func (this *manager) Close() error {
 // STRINGIFY
 
 func (this *manager) String() string {
-	return fmt.Sprintf("<graphics.fonts.FontManager>{ handle=0x%X version={%v,%v,%v} }", this.library, this.major, this.minor, this.patch)
+	return fmt.Sprintf("<graphics.fonts.Manager>{ handle=0x%X version={%v,%v,%v} }", this.library, this.major, this.minor, this.patch)
 }
 
 func (e ftError) Error() string {
@@ -430,7 +438,134 @@ func (this *manager) OpenFace(path string) (gopi.FontFace, error) {
 
 func (this *manager) OpenFaceAtIndex(path string, index uint) (gopi.FontFace, error) {
 	this.log.Debug2("<graphics.fonts.OpenFaceAtIndex{ path=%v index=%v }", path, index)
-	return nil, gopi.ErrNotImplemented
+
+	// Create the face
+	face := &face{
+		path: filepath.Clean(path),
+	}
+
+	this.Lock()
+	defer this.Unlock()
+
+	if handle, err := ftNewFace(this.library, path, index); err != nil {
+		return nil, err
+	} else if err := ftSelectCharmap(handle, FT_ENCODING_UNICODE); err != nil {
+		ftDoneFace(handle)
+		return nil, err
+	} else {
+		face.handle = handle
+	}
+
+	// VG Create Font
+	//face.font = C.vgCreateFont(C.VGint(face.GetNumGlyphs()))
+	//if face.font == VG_FONT_NONE {
+	//	this.vgfontDoneFace(face.handle)
+	//	return nil, vgGetError(vgErrorType(C.vgGetError()))
+	//}
+
+	// Load Glyphs
+	//if err := this.LoadGlyphs(face, 64.0, 0.0); err != nil {
+	//	this.vgfontDoneFace(face.handle)
+	//	C.vgDestroyFont(face.font)
+	//	return nil, err
+	//}
+
+	// Add face to list of faces
+	this.faces[face.path] = face
+
+	return face, nil
+}
+
+func (this *manager) OpenFacesAtPath(path string, callback func(manager gopi.FontManager, path string, info os.FileInfo) bool) error {
+	this.log.Debug2("<graphics.fonts.OpenFacesAtPath{ path=%v }", path)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return err
+	}
+	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if info == nil {
+			return nil
+		}
+		if callback(this, path, info) == false {
+			if info.IsDir() {
+				return filepath.SkipDir
+			} else {
+				return nil
+			}
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// Open zero-indexed face
+		face, err := this.OpenFace(path)
+		if err != nil {
+			return err
+		}
+		// If there are more faces in the file, then load these too
+		if face.NumFaces() > uint(1) {
+			for i := uint(1); i < face.NumFaces(); i++ {
+				_, err := this.OpenFaceAtIndex(path, i)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	return err
+}
+
+func (this *manager) DestroyFace(f gopi.FontFace) error {
+	this.log.Debug2("<graphics.fonts.DestroyFace{ face=%v }", f)
+	if face_, ok := f.(*face); ok == false {
+		return gopi.ErrBadParameter
+	} else if _, exists := this.faces[face_.path]; exists == false {
+		return gopi.ErrBadParameter
+	} else {
+		delete(this.faces, face_.path)
+		return ftDoneFace(face_.handle)
+	}
+}
+
+func (this *manager) FaceForPath(path string) gopi.FontFace {
+	if face, exists := this.faces[filepath.Clean(path)]; exists {
+		return face
+	} else {
+		return nil
+	}
+}
+
+func (this *manager) Families() []string {
+	families := make(map[string]bool, 0)
+	for _, face := range this.faces {
+		family := face.Family()
+		if _, exists := families[family]; exists {
+			continue
+		}
+		families[family] = true
+	}
+	familes_ := make([]string, 0, len(families))
+	for k := range families {
+		familes_ = append(familes_, k)
+	}
+	return familes_
+}
+
+func (this *manager) Faces(family string, flags gopi.FontFlags) []gopi.FontFace {
+	faces := make([]gopi.FontFace, 0)
+	for _, face := range this.faces {
+		if family != "" && family != face.Family() {
+			continue
+		}
+		switch flags {
+		case gopi.FONT_FLAGS_STYLE_ANY:
+			faces = append(faces, face)
+		case gopi.FONT_FLAGS_STYLE_REGULAR, gopi.FONT_FLAGS_STYLE_BOLD, gopi.FONT_FLAGS_STYLE_ITALIC, gopi.FONT_FLAGS_STYLE_BOLDITALIC:
+			if face.Flags()&flags == flags {
+				faces = append(faces, face)
+			}
+		}
+	}
+	return faces
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -457,4 +592,31 @@ func ftLibraryVersion(handle ftLibrary) (ftInt, ftInt, ftInt) {
 	var major, minor, patch ftInt
 	C.FT_Library_Version((C.FT_Library)(unsafe.Pointer(handle)), (*C.FT_Int)(unsafe.Pointer(&major)), (*C.FT_Int)(unsafe.Pointer(&minor)), (*C.FT_Int)(unsafe.Pointer(&patch)))
 	return major, minor, patch
+}
+
+func ftNewFace(handle ftLibrary, path string, index uint) (C.FT_Face, error) {
+	var face C.FT_Face
+	cstr := C.CString(path)
+	defer C.free(unsafe.Pointer(cstr))
+	if err := ftError(C.FT_New_Face((C.FT_Library)(unsafe.Pointer(handle)), cstr, C.FT_Long(index), &face)); err != FT_SUCCESS {
+		return nil, err
+	} else {
+		return face, nil
+	}
+}
+
+func ftDoneFace(handle C.FT_Face) error {
+	if err := ftError(C.FT_Done_Face(handle)); err != FT_SUCCESS {
+		return err
+	} else {
+		return nil
+	}
+}
+
+func ftSelectCharmap(handle C.FT_Face, encoding uint32) error {
+	if err := ftError(C.FT_Select_Charmap(handle, C.FT_Encoding(encoding))); err != FT_SUCCESS {
+		return err
+	} else {
+		return nil
+	}
 }
