@@ -26,7 +26,7 @@ func init() {
 		Requires: []string{"display"},
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
 			return gopi.Open(SurfaceManager{
-				Display: app.ModuleInstance("display").(gopi.Display),
+				Display: app.Display,
 			}, app.Logger)
 		},
 	})
