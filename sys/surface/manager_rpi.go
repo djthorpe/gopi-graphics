@@ -1,6 +1,8 @@
+// +build rpi
+
 /*
   Go Language Raspberry Pi Interface
-  (c) Copyright David Thorpe 2016-2018
+  (c) Copyright David Thorpe 2016-2019
   All Rights Reserved
 
   Documentation http://djthorpe.github.io/gopi/
@@ -14,7 +16,11 @@ import (
 	"sync"
 
 	// Frameworks
-	"github.com/djthorpe/gopi"
+	gopi "github.com/djthorpe/gopi"
+)
+
+import (
+	egl "github.com/djthorpe/gopi-hw/egl"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,8 +31,10 @@ type SurfaceManager struct {
 }
 
 type manager struct {
-	log     gopi.Logger
-	display gopi.Display
+	log          gopi.Logger
+	display      gopi.Display
+	handle       egl.Display
+	major, minor int
 	sync.Mutex
 }
 
@@ -45,20 +53,15 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 		return nil, gopi.ErrBadParameter
 	}
 
-	/*
-		// Initialize EGL
-		if handle, err := rpi.EGLGetDisplay(rpi.EGLNativeDisplayTypeForDisplay(this.display.Display())); err != rpi.EGL_SUCCESS {
-			return nil, os.NewSyscallError("EGLGetDisplay", err)
-		} else {
-			this.handle = handle
-		}
-		if major, minor, err := rpi.EGLInitialize(this.handle); err != rpi.EGL_SUCCESS {
-			return nil, os.NewSyscallError("EGLInitialize", err)
-		} else {
-			this.major = int(major)
-			this.minor = int(minor)
-		}
-	*/
+	// Initialize EGL
+	egl_display := egl.EGL_GetDisplay(this.display.Display())
+	if major, minor, err := egl.EGL_Initialize(egl_display); err != nil {
+		return nil, err
+	} else {
+		this.handle = handle
+		this.major = major
+		this.minor = minor
+	}
 
 	return this, nil
 }
@@ -72,15 +75,15 @@ func (this *manager) Close() error {
 	}
 
 	// TODO: Free Surfaces and Bitmaps
-	/*
-		// Close EGL
-		if err := rpi.EGLTerminate(this.handle); err != rpi.EGL_SUCCESS {
-			return os.NewSyscallError("EGLTerminate", err)
-		}*/
+	// Close EGL
+	egl_display := egl.EGL_GetDisplay(this.display.Display())
+	if err := egl.EGL_Terminate(egl_display); err != nil {
+		return err
+	}
 
 	// Blank out
 	this.display = nil
-	//this.handle = rpi.EGLDisplay(rpi.EGL_NO_DISPLAY)
+	this.handle = nil
 
 	return nil
 }
@@ -92,7 +95,7 @@ func (this *manager) String() string {
 	if this.display == nil {
 		return fmt.Sprintf("<graphics.surfacemanager>{ nil }")
 	} else {
-		return fmt.Sprintf("<graphics.surfacemanager>{ display=%v }", this.display)
+		return fmt.Sprintf("<graphics.surfacemanager>{ display=%v egl={ %v, %v } }", this.display, this.major, this.minor)
 	}
 }
 
