@@ -16,7 +16,7 @@ import (
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-	rpi "github.com/djthorpe/gopi-graphics/rpi"
+	rpi "github.com/djthorpe/gopi-hw/rpi"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,8 +30,8 @@ type Display struct {
 type display struct {
 	log      gopi.Logger
 	id       uint
-	handle   rpi.DXDisplayHandle
-	modeinfo *rpi.DXDisplayModeInfo
+	handle   rpi.DX_DisplayHandle
+	modeinfo *rpi.DX_DisplayModeInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,9 +48,9 @@ func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
 
 	// Open display
 	var err error
-	if this.handle, err = rpi.DXDisplayOpen(this.id); err != nil {
+	if this.handle, err = rpi.DX_DisplayOpen(rpi.DX_DisplayId(this.id)); err != nil {
 		return nil, err
-	} else if this.modeinfo, err = rpi.DXDisplayGetInfo(this.handle); err != nil {
+	} else if this.modeinfo, err = rpi.DX_DisplayGetInfo(this.handle); err != nil {
 		return nil, err
 	}
 
@@ -62,11 +62,11 @@ func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
 func (this *display) Close() error {
 	this.log.Debug("graphics.display.Close{ id=%v }", this.id)
 
-	if this.handle != rpi.DX_DISPLAY_NONE {
-		if err := rpi.DXDisplayClose(this.handle); err != nil {
+	if this.handle != rpi.DX_NO_HANDLE {
+		if err := rpi.DX_DisplayClose(this.handle); err != nil {
 			return err
 		} else {
-			this.handle = rpi.DX_DISPLAY_NONE
+			this.handle = rpi.DX_NO_HANDLE
 		}
 	}
 
@@ -83,7 +83,7 @@ func (this *display) Display() uint {
 
 // Return size
 func (this *display) Size() (uint32, uint32) {
-	return this.modeinfo.Size.Width, this.modeinfo.Size.Height
+	return this.modeinfo.Size.W, this.modeinfo.Size.H
 }
 
 // Return pixels-per-inch
@@ -94,12 +94,12 @@ func (this *display) PixelsPerInch() uint32 {
 
 // Return name of display
 func (this *display) Name() string {
-	return fmt.Sprint(rpi.DXDisplayId(this.id))
+	return fmt.Sprint(rpi.DX_DisplayId(this.id))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
 func (this *display) String() string {
-	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", rpi.DXDisplayId(this.id), this.id, this.modeinfo)
+	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", rpi.DX_DisplayId(this.id), this.id, this.modeinfo)
 }

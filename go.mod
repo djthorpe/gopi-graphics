@@ -3,7 +3,7 @@ module github.com/djthorpe/gopi-graphics
 require (
 	github.com/cenkalti/backoff v2.1.0+incompatible // indirect
 	github.com/djthorpe/gopi v1.0.34
-	github.com/djthorpe/gopi-hw v1.0.9
+	github.com/djthorpe/gopi-hw v1.0.11
 	github.com/djthorpe/zeroconf v0.0.0-20171029195637-8219919fca89 // indirect
 	github.com/golang/lint v0.0.0-20181217174547-8f45f776aaf1 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
