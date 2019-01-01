@@ -30,7 +30,7 @@ type SurfaceManager struct {
 type manager struct {
 	log          gopi.Logger
 	display      gopi.Display
-	handle       egl.Display
+	handle       egl.EGL_Display
 	major, minor int
 	sync.Mutex
 }
@@ -55,7 +55,7 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 	if major, minor, err := egl.EGL_Initialize(egl_display); err != nil {
 		return nil, err
 	} else {
-		this.handle = handle
+		this.handle = egl_display
 		this.major = major
 		this.minor = minor
 	}
@@ -73,8 +73,7 @@ func (this *manager) Close() error {
 
 	// TODO: Free Surfaces and Bitmaps
 	// Close EGL
-	egl_display := egl.EGL_GetDisplay(this.display.Display())
-	if err := egl.EGL_Terminate(egl_display); err != nil {
+	if err := egl.EGL_Terminate(this.handle); err != nil {
 		return err
 	}
 
