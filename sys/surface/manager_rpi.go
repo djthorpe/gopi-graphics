@@ -17,9 +17,6 @@ import (
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-)
-
-import (
 	egl "github.com/djthorpe/gopi-hw/egl"
 )
 
