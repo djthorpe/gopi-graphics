@@ -15,18 +15,8 @@ import (
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
+	ft "github.com/djthorpe/gopi-hw/freetype"
 )
-
-////////////////////////////////////////////////////////////////////////////////
-// CGO
-
-/*
-  #cgo CFLAGS:   -I/usr/include/freetype2
-  #cgo LDFLAGS:  -lfreetype
-  #include <ft2build.h>
-  #include FT_FREETYPE_H
-*/
-import "C"
 
 ////////////////////////////////////////////////////////////////////////////////
 // PUBLIC FUNCTIONS: Face information
@@ -40,25 +30,25 @@ func (this *face) Name() string {
 }
 
 func (this *face) Family() string {
-	return C.GoString((*C.char)(this.handle.family_name))
+	return ft.FT_FaceFamily(this.handle)
 }
 
 func (this *face) Style() string {
-	return C.GoString((*C.char)(this.handle.style_name))
+	return ft.FT_FaceStyle(this.handle)
 }
 
 func (this *face) Index() uint {
-	return uint(this.handle.face_index)
+	return ft.FT_FaceIndex(this.handle)
 }
 
 func (this *face) NumFaces() uint {
-	return uint(this.handle.num_faces)
+	return ft.FT_FaceNumFaces(this.handle)
 }
 
 func (this *face) NumGlyphs() uint {
-	return uint(this.handle.num_glyphs)
+	return ft.FT_FaceNumGlyphs(this.handle)
 }
 
 func (this *face) Flags() gopi.FontFlags {
-	return gopi.FontFlags(this.handle.style_flags)
+	return ft.FT_FaceStyleFlags(this.handle)
 }

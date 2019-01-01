@@ -69,13 +69,15 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 		// Output all fonts
 		table2 := tablewriter.NewWriter(os.Stdout)
-		table2.SetHeader([]string{"Family", "Face", "Index", "Flags"})
+		table2.SetHeader([]string{"Name", "Index", "Family", "Style", "Flags", "Glyphs"})
 		for _, face := range app.Fonts.Faces("", gopi.FONT_FLAGS_STYLE_ANY) {
 			table2.Append([]string{
-				face.Family(),
 				face.Name(),
 				fmt.Sprint(face.Index()),
+				face.Family(),
+				face.Style(),
 				fmt.Sprint(face.Flags()),
+				fmt.Sprint(face.NumGlyphs()),
 			})
 		}
 		table2.Render()
