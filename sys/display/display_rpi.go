@@ -1,6 +1,8 @@
+// +build rpi
+
 /*
   Go Language Raspberry Pi Interface
-  (c) Copyright David Thorpe 2016-2017
+  (c) Copyright David Thorpe 2016-2018
   All Rights Reserved
 
   Documentation http://djthorpe.github.io/gopi/
@@ -14,7 +16,7 @@ import (
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
-	rpi "github.com/djthorpe/gopi-graphics/rpi"
+	rpi "github.com/djthorpe/gopi-hw/rpi"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,9 +29,9 @@ type Display struct {
 
 type display struct {
 	log      gopi.Logger
-	id       uint
-	handle   rpi.DXDisplayHandle
-	modeinfo *rpi.DXDisplayModeInfo
+	display  uint
+	handle   rpi.DX_DisplayHandle
+	modeinfo rpi.DX_DisplayModeInfo
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -37,18 +39,18 @@ type display struct {
 
 // Open
 func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
-	logger.Debug("graphics.display.Open{ id=%v }", config.Display)
+	logger.Debug("graphics.display.Open{ display=%v }", config.Display)
 
 	this := new(display)
 	this.log = logger
-	this.id = config.Display
+	this.display = config.Display
 	this.handle = rpi.DX_DISPLAY_NONE
 
 	// Open display
 	var err error
-	if this.handle, err = rpi.DXDisplayOpen(this.id); err != nil {
+	if this.handle, err = rpi.DX_DisplayOpen(rpi.DX_DisplayId(this.display)); err != nil {
 		return nil, err
-	} else if this.modeinfo, err = rpi.DXDisplayGetInfo(this.handle); err != nil {
+	} else if this.modeinfo, err = rpi.DX_DisplayGetInfo(this.handle); err != nil {
 		return nil, err
 	}
 
@@ -58,16 +60,21 @@ func (config Display) Open(logger gopi.Logger) (gopi.Driver, error) {
 
 // Close
 func (this *display) Close() error {
-	this.log.Debug("graphics.display.Close{ id=%v }", this.id)
+	this.log.Debug("graphics.display.Close{ display=%v }", this.display)
 
-	if this.handle != rpi.DX_DISPLAY_NONE {
-		if err := rpi.DXDisplayClose(this.handle); err != nil {
-			return err
-		} else {
-			this.handle = rpi.DX_DISPLAY_NONE
-		}
+	if this.handle == rpi.DX_NO_HANDLE {
+		return nil
 	}
 
+	if err := rpi.DX_DisplayClose(this.handle); err != nil {
+		return err
+	}
+
+	// Release resources
+	this.handle = rpi.DX_NO_HANDLE
+	this.modeinfo = rpi.DX_DisplayModeInfo{}
+
+	// Return success
 	return nil
 }
 
@@ -76,12 +83,12 @@ func (this *display) Close() error {
 
 // Display returns display number
 func (this *display) Display() uint {
-	return this.id
+	return this.display
 }
 
 // Return size
 func (this *display) Size() (uint32, uint32) {
-	return this.modeinfo.Size.Width, this.modeinfo.Size.Height
+	return this.modeinfo.Size.W, this.modeinfo.Size.H
 }
 
 // Return pixels-per-inch
@@ -92,12 +99,12 @@ func (this *display) PixelsPerInch() uint32 {
 
 // Return name of display
 func (this *display) Name() string {
-	return fmt.Sprint(rpi.DXDisplayId(this.id))
+	return fmt.Sprint(rpi.DX_DisplayId(this.display))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
 func (this *display) String() string {
-	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", rpi.DXDisplayId(this.id), this.id, this.modeinfo)
+	return fmt.Sprintf("graphics.display{ id=%v (%v) info=%v }", rpi.DX_DisplayId(this.display), this.display, this.modeinfo)
 }

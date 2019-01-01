@@ -2,7 +2,7 @@
 
 /*
   Go Language Raspberry Pi Interface
-  (c) Copyright David Thorpe 2016-2017
+  (c) Copyright David Thorpe 2016-2019
   All Rights Reserved
 
   Documentation http://djthorpe.github.io/gopi/
@@ -26,7 +26,7 @@ func init() {
 		Requires: []string{"display"},
 		New: func(app *gopi.AppInstance) (gopi.Driver, error) {
 			return gopi.Open(SurfaceManager{
-				Display: app.ModuleInstance("display").(gopi.Display),
+				Display: app.Display,
 			}, app.Logger)
 		},
 	})

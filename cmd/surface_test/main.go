@@ -6,38 +6,39 @@
 	For Licensing and Usage information, please see LICENSE.md
 */
 
-// The canonical hello world example demonstrates printing hello world and then exiting.
-// Here we use the 'generic' set of modules which provide generic system services
+// Outputs a table of displays - works on RPi at the moment
 package main
 
 import (
+	"fmt"
 	"os"
 
 	// Frameworks
-	gopi "github.com/djthorpe/gopi"
+	"github.com/djthorpe/gopi"
 
 	// Modules
 	_ "github.com/djthorpe/gopi-graphics/sys/display"
 	_ "github.com/djthorpe/gopi-graphics/sys/surface"
-	_ "github.com/djthorpe/gopi/sys/hw/rpi"
+	_ "github.com/djthorpe/gopi-hw/sys/hw"
+	_ "github.com/djthorpe/gopi-hw/sys/metrics"
 	_ "github.com/djthorpe/gopi/sys/logger"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
 
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
-	app.Logger.Info("In Main, surface manager=%v", app.Graphics)
+	if gfx := app.Graphics; gfx == nil {
+		return fmt.Errorf("Missing Surfaces Manager")
+	} else {
+		fmt.Println(gfx)
+	}
 
-	// Signal that main thread is done
-	done <- gopi.DONE
 	return nil
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("graphics/surfaces")
+	config := gopi.NewAppConfig("graphics")
 
 	// Run the command line tool
 	os.Exit(gopi.CommandLineTool(config, Main))
