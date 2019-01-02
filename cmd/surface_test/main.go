@@ -29,8 +29,11 @@ import (
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	if gfx := app.Graphics; gfx == nil {
 		return fmt.Errorf("Missing Surfaces Manager")
+	} else if surface, err := gfx.CreateSurface(gopi.SURFACE_TYPE_OPENVG, 0, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{0, 0}, gopi.Size{100, 100}); err != nil {
+		return err
 	} else {
 		fmt.Println(gfx)
+		fmt.Println(surface)
 	}
 
 	return nil
