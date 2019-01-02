@@ -181,7 +181,17 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 		return nil, err
 	} else if context, err := egl.EGL_CreateContext(this.handle, config, nil); err != nil {
 		return nil, err
+	} else if native_window, err := this._CreateNativeWindow(); err != nil { // TODO
+		// destroy context
+		return nil, err
+	} else if surface, err := egl.EGL_CreateWindowSurface(this.handle, config, native_window, nil); err != nil { // TODO
+		// destroy context
+		return nil, err
+	} else if err := egl.EGL_SetCurrentContext(surface, context); err != nil { // TODO
+		// destroy context, surface...
+		return nil, err
 	} else {
+
 		s := &surface{
 			log:          this.log,
 			surface_type: api,
@@ -190,6 +200,7 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 			opacity:      opacity,
 			layer:        layer,
 			context:      context,
+			surface:      surface,
 		}
 		this.surfaces = append(this.surfaces, s)
 		return s, nil
