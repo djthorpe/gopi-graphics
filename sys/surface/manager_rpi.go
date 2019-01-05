@@ -197,7 +197,7 @@ func (this *manager) String() string {
 func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
 	this.log.Debug2("<graphics.surfacemanager>CreateSurface{ api=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", api, flags, opacity, layer, origin, size)
 
-	// Create EGL context with 8 bits per pixel, 8 bits for ALpha
+	// Create EGL context with 8 bits per pixel, 8 bits for Alpha
 	if api_, exists := egl.EGL_APIMap[api]; exists == false {
 		return nil, gopi.ErrBadParameter
 	} else if renderable_, exists := egl.EGL_RenderableMap[api]; exists == false {
@@ -213,13 +213,13 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 	} else if native_surface, err := this.CreateNativeSurface(nil, flags, opacity, layer, origin, size); err != nil {
 		return nil, err
 	} else if handle, err := egl.EGL_CreateSurface(this.handle, config, egl_nativewindow(native_surface)); err != nil {
-		// TODO: Create native surface
+		// TODO: Destroy native surface
 		return nil, err
 	} else if context, err := egl.EGL_CreateContext(this.handle, config, nil); err != nil {
-		// TODO: Create native surface, window
+		// TODO: Destroy native surface, window
 		return nil, err
 	} else if err := egl.EGL_MakeCurrent(this.handle, handle, handle, context); err != nil {
-		// TODO destroy context, surface, window, ...
+		// TODO: Destroy context, surface, window, ...
 		return nil, err
 	} else {
 		s := &surface{
@@ -287,8 +287,10 @@ func (this *manager) DestroySurface(s gopi.Surface) error {
 			}
 		}
 		if surface_.native != nil {
-			if err := this.DestroyNativeSurface(s); err != nil {
+			if err := this.DestroyNativeSurface(surface_.native); err != nil {
 				return err
+			} else {
+				surface_.native = nil
 			}
 		}
 	}
@@ -327,7 +329,7 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	src_size := rpi.DX_RectSize(dest_rect)
 	dest_size := rpi.DX_RectSize(dest_rect)
 
-	// Check sizes
+	// Check size - uint16
 	if src_size.W > 0xFFFF || src_size.H > 0xFFFF {
 		return nil, gopi.ErrBadParameter
 	}
@@ -357,8 +359,8 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	}
 }
 
-func (this *manager) DestroyNativeSurface(s gopi.Surface) error {
-	this.log.Debug2("<graphics.surfacemanager>DestroyNativeSurface{ surface=%v }", s)
+func (this *manager) DestroyNativeSurface(native *nativesurface) error {
+	this.log.Debug2("<graphics.surfacemanager>DestroyNativeSurface{ id=0x%08X }", native.handle)
 
 	// If no update, then return out of order error
 	this.Lock()
@@ -367,15 +369,13 @@ func (this *manager) DestroyNativeSurface(s gopi.Surface) error {
 		return gopi.ErrOutOfOrder
 	}
 
-	// If no native element, return
-	if surface_, ok := s.(*surface); ok == false {
-		return gopi.ErrBadParameter
-	} else if surface_.native == nil {
+	// Remove element
+	if native.handle == 0 {
 		return nil
-	} else if err := rpi.DX_ElementRemove(this.update, surface_.native.handle); err != nil {
+	} else if err := rpi.DX_ElementRemove(this.update, native.handle); err != nil {
 		return err
 	} else {
-		surface_.native = nil
+		native.handle = rpi.DX_Element(0)
 		return nil
 	}
 }
@@ -385,6 +385,8 @@ func (this *manager) DestroyNativeSurface(s gopi.Surface) error {
 
 func (this *manager) CreateBitmap(api gopi.SurfaceType, flags gopi.SurfaceFlags, size gopi.Size) (gopi.Bitmap, error) {
 	this.log.Debug2("<graphics.surfacemanager>CreateBitmap{ api=%v flags=%v size=%v }", api, flags, size)
+
+	// Check parameters
 	if api != gopi.SURFACE_TYPE_RGBA32 {
 		return nil, gopi.ErrBadParameter
 	}
@@ -392,12 +394,12 @@ func (this *manager) CreateBitmap(api gopi.SurfaceType, flags gopi.SurfaceFlags,
 		return nil, gopi.ErrBadParameter
 	}
 
-	// dx_size
+	// Create resource
 	dx_size := rpi.DX_Size{uint32(size.W), uint32(size.H)}
 	if handle, err := rpi.DX_ResourceCreate(rpi.DX_IMAGE_TYPE_RGBA32, dx_size); err != nil {
 		return nil, err
 	} else {
-		// Alignment on (4 x uint32) boundaries
+		// Alignment on boundaries
 		b := &bitmap{
 			log:          this.log,
 			surface_type: api,
@@ -442,6 +444,7 @@ func opacity_from_float(opacity float32) uint32 {
 	} else if opacity > 1.0 {
 		opacity = 1.0
 	}
+	// Opacity is between 0 (fully transparent) and 255 (fully opaque)
 	return uint32(opacity * float32(0xFF))
 }
 
