@@ -11,7 +11,9 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
+	"time"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -26,13 +28,66 @@ import (
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func Main(app *gopi.AppInstance, done chan<- struct{}) error {
-	if gfx := app.Graphics; gfx == nil {
+func Background(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct{}) error {
+	gfx := app.Graphics
+	if gfx == nil {
 		return fmt.Errorf("Missing Surfaces Manager")
-	} else {
-		fmt.Println(gfx)
 	}
 
+	var surface1, surface2 gopi.Surface
+
+	// Create a 2x2 bitmap and place on the screen
+	if bitmap1, err := gfx.CreateBitmap(gopi.SURFACE_TYPE_RGBA32, gopi.SURFACE_FLAG_NONE, gopi.Size{2, 2}); err != nil {
+		return err
+	} else if bitmap2, err := gfx.CreateBitmap(gopi.SURFACE_TYPE_RGBA32, gopi.SURFACE_FLAG_NONE, gopi.Size{2, 2}); err != nil {
+		return err
+	} else if err := gfx.Do(func(gopi.SurfaceManager) error {
+		// Clear bitmaps
+		bitmap1.ClearToColor(color.RGBA{255, 0, 0, 200})
+		bitmap2.ClearToColor(color.RGBA{0, 0, 255, 200})
+		// Create surfaces
+		if s, err := gfx.CreateSurfaceWithBitmap(bitmap1, gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{250, 250}); err != nil {
+			return err
+		} else {
+			surface1 = s
+		}
+		if s, err := gfx.CreateSurfaceWithBitmap(bitmap2, gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{250, 250}, gopi.Size{250, 250}); err != nil {
+			return err
+		} else {
+			surface2 = s
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Now run the program
+	start <- gopi.DONE
+
+	// Move bitmap once per second
+	timer := time.NewTicker(time.Millisecond * 100)
+FOR_LOOP:
+	for {
+		select {
+		case <-timer.C:
+			gfx.Do(func(gfx gopi.SurfaceManager) error {
+				gfx.MoveOriginBy(surface1, gopi.Point{1, 1})
+				gfx.MoveOriginBy(surface2, gopi.Point{-1, -1})
+				return nil
+			})
+		case <-stop:
+			break FOR_LOOP
+		}
+	}
+
+	// Finished
+	return nil
+}
+
+func Main(app *gopi.AppInstance, done chan<- struct{}) error {
+	fmt.Println("Press CTRL+C to exit")
+	app.WaitForSignal()
+	done <- gopi.DONE
 	return nil
 }
 
@@ -41,5 +96,5 @@ func main() {
 	config := gopi.NewAppConfig("graphics")
 
 	// Run the command line tool
-	os.Exit(gopi.CommandLineTool(config, Main))
+	os.Exit(gopi.CommandLineTool2(config, Main, Background))
 }

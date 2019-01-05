@@ -13,11 +13,15 @@ package surface
 
 import (
 	"fmt"
+	"strings"
 	"sync"
+	"unsafe"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	display "github.com/djthorpe/gopi-graphics/sys/display"
 	egl "github.com/djthorpe/gopi-hw/egl"
+	rpi "github.com/djthorpe/gopi-hw/rpi"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,9 +34,36 @@ type SurfaceManager struct {
 type manager struct {
 	log          gopi.Logger
 	display      gopi.Display
-	handle       egl.Display
+	handle       egl.EGL_Display
 	major, minor int
+	surfaces     []*surface
+	bitmaps      []*bitmap
+	update       rpi.DX_Update
 	sync.Mutex
+}
+
+type surface struct {
+	log          gopi.Logger
+	surface_type gopi.SurfaceType
+	opacity      float32
+	layer        uint16
+	context      egl.EGL_Context
+	handle       egl.EGL_Surface
+	native       *nativesurface
+}
+
+type bitmap struct {
+	log          gopi.Logger
+	surface_type gopi.SurfaceType
+	size         rpi.DX_Size
+	handle       rpi.DX_Resource
+	stride       uint32
+}
+
+type nativesurface struct {
+	handle rpi.DX_Element
+	size   rpi.DX_Size
+	origin rpi.DX_Point
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -51,8 +82,9 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 	}
 
 	// Initialize EGL
-	egl_display := egl.EGL_GetDisplay(this.display.Display())
-	if major, minor, err := egl.EGL_Initialize(egl_display); err != nil {
+	if handle := egl.EGL_GetDisplay(this.display.Display()); handle == nil {
+		return nil, gopi.ErrBadParameter
+	} else if major, minor, err := egl.EGL_Initialize(handle); err != nil {
 		return nil, err
 	} else {
 		this.handle = handle
@@ -60,138 +92,53 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 		this.minor = minor
 	}
 
+	// Create surface array
+	this.surfaces = make([]*surface, 0)
+
 	return this, nil
 }
 
 func (this *manager) Close() error {
 	this.log.Debug("<graphics.surfacemanager.Close>{ display=%v }", this.display)
 
-	// Check display is already closed
-	if this.display == nil {
+	// Check EGL is already closed
+	if this.handle == nil {
 		return nil
 	}
 
-	// TODO: Free Surfaces and Bitmaps
-	// Close EGL
-	egl_display := egl.EGL_GetDisplay(this.display.Display())
-	if err := egl.EGL_Terminate(egl_display); err != nil {
+	// Free Surfaces
+	if err := this.Do(func(gopi.SurfaceManager) error {
+		for _, surface := range this.surfaces {
+			if err := this.DestroySurface(surface); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
-	// Blank out
+	// Free Bitmaps
+	for _, bitmap := range this.bitmaps {
+		if err := this.DestroyBitmap(bitmap); err != nil {
+			return err
+		}
+	}
+
+	// Close EGL
+	if err := egl.EGL_Terminate(this.handle); err != nil {
+		return err
+	}
+
+	// Free resources
+	this.surfaces = nil
+	this.bitmaps = nil
 	this.display = nil
 	this.handle = nil
 
+	// Return success
 	return nil
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// STRINGIFY
-
-func (this *manager) String() string {
-	if this.display == nil {
-		return fmt.Sprintf("<graphics.surfacemanager>{ nil }")
-	} else {
-		return fmt.Sprintf("<graphics.surfacemanager>{ display=%v egl={ %v, %v } }", this.display, this.major, this.minor)
-	}
-}
-
-/*
-////////////////////////////////////////////////////////////////////////////////
-// DO
-
-func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
-	// check parameters
-	if this.handle == rpi.EGLDisplay(rpi.EGL_NO_DISPLAY) {
-		return gopi.ErrBadParameter
-	}
-
-	// create update
-	if err := this.doUpdateStart(); err != nil {
-		return err
-	}
-
-	// callback
-	cb_err := callback(this)
-
-	// end update
-	if err := this.doUpdateEnd(); err != nil {
-		this.log.Error("doUpdateEnd: %v", err)
-	}
-
-	// return callback error
-	return cb_err
-}
-
-func (this *manager) doUpdateStart() error {
-	this.Lock()
-	defer this.Unlock()
-	if this.update != rpi.DXUpdateHandle(rpi.DX_NO_UPDATE) {
-		return gopi.ErrOutOfOrder
-	}
-	if update, err := rpi.DXUpdateStart(rpi.DX_UPDATE_PRIORITY_DEFAULT); err != rpi.DX_SUCCESS {
-		return os.NewSyscallError("DXUpdateStart", err)
-	} else {
-		this.update = update
-		return nil
-	}
-}
-
-func (this *manager) doUpdateEnd() error {
-	this.Lock()
-	defer this.Unlock()
-	if this.update == rpi.DXUpdateHandle(rpi.DX_NO_UPDATE) {
-		return gopi.ErrOutOfOrder
-	}
-	if err := rpi.DXUpdateSubmitSync(this.update); err != rpi.DX_SUCCESS {
-		return os.NewSyscallError("DXUpdateSubmitSync", err)
-	} else {
-		this.update = rpi.DXUpdateHandle(rpi.DX_NO_UPDATE)
-		return nil
-	}
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// SURFACE
-
-func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
-	return nil, gopi.ErrNotImplemented
-}
-
-func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
-	return nil, gopi.ErrNotImplemented
-}
-
-func (this *manager) DestroySurface(surface gopi.Surface) error {
-	return gopi.ErrNotImplemented
-}
-
-// SetLayer changes a surface layer (except if it's a background or cursor). Currently
-// the flags argument is ignored
-func (this *manager) SetLayer(surface gopi.Surface, flags gopi.SurfaceFlags, layer uint16) error {
-	return gopi.ErrNotImplemented
-}
-
-// SetOrigin moves the surface. Currently the flags argument is ignored
-func (this *manager) SetOrigin(surface gopi.Surface, flags gopi.SurfaceFlags, origin gopi.Point) error {
-	return gopi.ErrNotImplemented
-}
-
-func (this *manager) SetOpacity(surface gopi.Surface, flags gopi.SurfaceFlags, opacity float32) error {
-	return gopi.ErrNotImplemented
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// BITMAP
-
-func (this *manager) CreateBitmap(api gopi.SurfaceType, size gopi.Size) (gopi.Bitmap, error) {
-	return nil, gopi.ErrNotImplemented
-}
-
-func (this *manager) DestroyBitmap(bitmap gopi.Bitmap) error {
-	return gopi.ErrNotImplemented
-}
-*/
 
 ////////////////////////////////////////////////////////////////////////////////
 // INTERFACE
@@ -201,29 +148,451 @@ func (this *manager) Display() gopi.Display {
 }
 
 func (this *manager) Name() string {
-	return "TODO"
-	//	return fmt.Sprintf("%v %v", rpi.EGLQueryString(this.handle, EGL_VENDOR), rpi.EGLQueryString(this.handle, EGL_VERSION))
+	if this.handle == nil {
+		return ""
+	} else {
+		return fmt.Sprintf("%v %v", egl.EGL_QueryString(this.handle, egl.EGL_QUERY_VENDOR), egl.EGL_QueryString(this.handle, egl.EGL_QUERY_VERSION))
+	}
 }
 
 func (this *manager) Extensions() []string {
-	return []string{}
-	//	return strings.Split(rpi.EGLQueryString(this.handle, rpi.EGL_EXTENSIONS), " ")
+	if this.handle == nil {
+		return nil
+	} else {
+		return strings.Split(egl.EGL_QueryString(this.handle, egl.EGL_QUERY_EXTENSIONS), " ")
+	}
 }
 
-// Return capabilities for the GPU
 func (this *manager) Types() []gopi.SurfaceType {
-	return nil
-}
-
-/*
-	types := strings.Split(rpi.EGLQueryString(this.handle, rpi.EGL_CLIENT_APIS), " ")
-	surface_types := make([]gopi.SurfaceType, 0, 3)
+	if this.handle == nil {
+		return nil
+	}
+	types := strings.Split(egl.EGL_QueryString(this.handle, egl.EGL_QUERY_CLIENT_APIS), " ")
+	surface_types := make([]gopi.SurfaceType, 0, len(types))
 	for _, t := range types {
-		if t2, ok := eglStringTypeMap[t]; ok {
-			surface_types = append(surface_types, t2)
+		if t_, ok := egl.EGL_SurfaceTypeMap[t]; ok {
+			surface_types = append(surface_types, t_)
 		}
 	}
 	// always include RGBA32
 	return append(surface_types, gopi.SURFACE_TYPE_RGBA32)
+}
 
-*/
+////////////////////////////////////////////////////////////////////////////////
+// STRINGIFY
+
+func (this *manager) String() string {
+	if this.display == nil {
+		return fmt.Sprintf("<graphics.surfacemanager>{ nil }")
+	} else {
+		return fmt.Sprintf("<graphics.surfacemanager>{ display=%v name=%v extensions=%v types=%v egl={ %v, %v }  }", this.display, this.Name(), this.Extensions(), this.Types(), this.major, this.minor)
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SURFACES
+
+func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateSurface{ api=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", api, flags, opacity, layer, origin, size)
+
+	// Create EGL context with 8 bits per pixel, 8 bits for Alpha
+	if api_, exists := egl.EGL_APIMap[api]; exists == false {
+		return nil, gopi.ErrBadParameter
+	} else if renderable_, exists := egl.EGL_RenderableMap[api]; exists == false {
+		return nil, gopi.ErrBadParameter
+	} else if opacity < 0.0 || opacity > 1.0 {
+		return nil, gopi.ErrBadParameter
+	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
+		return nil, gopi.ErrBadParameter
+	} else if err := egl.EGL_BindAPI(api_); err != nil {
+		return nil, err
+	} else if config, err := egl.EGL_ChooseConfig(this.handle, 8, 8, egl.EGL_SURFACETYPE_FLAG_WINDOW, renderable_); err != nil {
+		return nil, err
+	} else if native_surface, err := this.CreateNativeSurface(nil, flags, opacity, layer, origin, size); err != nil {
+		return nil, err
+	} else if handle, err := egl.EGL_CreateSurface(this.handle, config, egl_nativewindow(native_surface)); err != nil {
+		// TODO: Destroy native surface
+		return nil, err
+	} else if context, err := egl.EGL_CreateContext(this.handle, config, nil); err != nil {
+		// TODO: Destroy native surface, window
+		return nil, err
+	} else if err := egl.EGL_MakeCurrent(this.handle, handle, handle, context); err != nil {
+		// TODO: Destroy context, surface, window, ...
+		return nil, err
+	} else {
+		s := &surface{
+			log:          this.log,
+			surface_type: api,
+			opacity:      opacity,
+			layer:        layer,
+			context:      context,
+			handle:       handle,
+			native:       native_surface,
+		}
+		this.surfaces = append(this.surfaces, s)
+		return s, nil
+	}
+}
+
+func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateSurfaceWithBitmap{ bitmap=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", bitmap, flags, opacity, layer, origin, size)
+
+	if opacity < 0.0 || opacity > 1.0 {
+		return nil, gopi.ErrBadParameter
+	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
+		return nil, gopi.ErrBadParameter
+	} else if bitmap == nil {
+		return nil, gopi.ErrBadParameter
+	} else if size = size_from_bitmap(bitmap, size); size == gopi.ZeroSize {
+		return nil, gopi.ErrBadParameter
+	} else if native_surface, err := this.CreateNativeSurface(bitmap, flags, opacity, layer, origin, size); err != nil {
+		return nil, err
+	} else {
+		s := &surface{
+			log:          this.log,
+			surface_type: bitmap.Type(),
+			opacity:      opacity,
+			layer:        layer,
+			native:       native_surface,
+		}
+		this.surfaces = append(this.surfaces, s)
+		return s, nil
+	}
+}
+
+func (this *manager) DestroySurface(s gopi.Surface) error {
+	this.log.Debug2("<graphics.surfacemanager>DestroySurface{ surface=%v }", s)
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else {
+		if surface_.handle != nil {
+			if err := egl.EGL_DestroySurface(this.handle, surface_.handle); err != nil {
+				return err
+			} else {
+				surface_.handle = nil
+			}
+		}
+		if surface_.context != nil {
+			if err := egl.EGL_DestroyContext(this.handle, surface_.context); err != nil {
+				return err
+			} else {
+				surface_.context = nil
+			}
+		}
+		if surface_.native != nil {
+			if err := this.DestroyNativeSurface(surface_.native); err != nil {
+				return err
+			} else {
+				surface_.native = nil
+			}
+		}
+	}
+
+	// Return success
+	return nil
+}
+
+func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (*nativesurface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateNativeSurface{ bitmap=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", b, flags, opacity, layer, origin, size)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return nil, gopi.ErrOutOfOrder
+	}
+
+	// Set alpha
+	alpha := rpi.DX_Alpha{
+		Opacity: uint32(opacity_from_float(opacity)),
+	}
+	if flags&gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE != 0 {
+		alpha.Flags |= rpi.DX_ALPHA_FLAG_FROM_SOURCE
+	} else {
+		alpha.Flags |= rpi.DX_ALPHA_FLAG_FIXED_ALL_PIXELS
+	}
+
+	// Clamp, transform and protection
+	clamp := rpi.DX_Clamp{}
+	transform := rpi.DX_TRANSFORM_NONE
+	protection := rpi.DX_PROTECTION_NONE
+
+	// If there is a bitmap, then the source rectangle is set from that
+	dest_rect := rpi.DX_NewRect(int32(origin.X), int32(origin.Y), uint32(size.W), uint32(size.H))
+	src_size := rpi.DX_RectSize(dest_rect)
+	dest_size := rpi.DX_RectSize(dest_rect)
+	dest_origin := rpi.DX_RectOrigin(dest_rect)
+
+	// Check size - uint16
+	if src_size.W > 0xFFFF || src_size.H > 0xFFFF {
+		return nil, gopi.ErrBadParameter
+	}
+	if dest_size.W > 0xFFFF || dest_size.H > 0xFFFF {
+		return nil, gopi.ErrBadParameter
+	}
+
+	// Adjust size for source
+	src_size.W = src_size.W << 16
+	src_size.H = src_size.H << 16
+
+	// Get source resource
+	src_resource := rpi.DX_Resource(0)
+	if b != nil {
+		if bitmap_, ok := b.(*bitmap); ok == false {
+			return nil, gopi.ErrBadParameter
+		} else {
+			src_resource = bitmap_.handle
+		}
+	}
+
+	// Create the element
+	if handle, err := rpi.DX_ElementAdd(this.update, rpi_dx_display(this.display), layer, dest_rect, src_resource, src_size, protection, alpha, clamp, transform); err != nil {
+		return nil, err
+	} else {
+		return &nativesurface{handle, dest_size, dest_origin}, nil
+	}
+}
+
+func (this *manager) DestroyNativeSurface(native *nativesurface) error {
+	this.log.Debug2("<graphics.surfacemanager>DestroyNativeSurface{ id=0x%08X }", native.handle)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	// Remove element
+	if native.handle == 0 {
+		return nil
+	} else if err := rpi.DX_ElementRemove(this.update, native.handle); err != nil {
+		return err
+	} else {
+		native.handle = rpi.DX_Element(0)
+		return nil
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// BITMAPS
+
+func (this *manager) CreateBitmap(api gopi.SurfaceType, flags gopi.SurfaceFlags, size gopi.Size) (gopi.Bitmap, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateBitmap{ api=%v flags=%v size=%v }", api, flags, size)
+
+	// Check parameters
+	if api != gopi.SURFACE_TYPE_RGBA32 {
+		return nil, gopi.ErrBadParameter
+	}
+	if size.W <= 0.0 || size.H <= 0.0 {
+		return nil, gopi.ErrBadParameter
+	}
+
+	// Create resource
+	dx_size := rpi.DX_Size{uint32(size.W), uint32(size.H)}
+	if handle, err := rpi.DX_ResourceCreate(rpi.DX_IMAGE_TYPE_RGBA32, dx_size); err != nil {
+		return nil, err
+	} else {
+		// Alignment on boundaries
+		b := &bitmap{
+			log:          this.log,
+			surface_type: api,
+			size:         dx_size,
+			handle:       handle,
+			stride:       rpi.DX_AlignUp(dx_size.W, 16) * 4,
+		}
+		this.bitmaps = append(this.bitmaps, b)
+		return b, nil
+	}
+}
+
+func (this *manager) DestroyBitmap(b gopi.Bitmap) error {
+	this.log.Debug2("<graphics.surfacemanager>DestroyBitmap{ bitmap=%v }", b)
+
+	if bitmap_, ok := b.(*bitmap); ok == false {
+		return gopi.ErrBadParameter
+	} else {
+		if bitmap_.handle != 0 {
+			if err := rpi.DX_ResourceDelete(bitmap_.handle); err != nil {
+				return err
+			} else {
+				bitmap_.handle = 0
+			}
+		}
+	}
+
+	// Success
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// PRIVATE METHODS
+
+func egl_nativewindow(window *nativesurface) egl.EGL_NativeWindow {
+	return egl.EGL_NativeWindow(unsafe.Pointer(window))
+}
+
+func opacity_from_float(opacity float32) uint8 {
+	if opacity < 0.0 {
+		opacity = 0.0
+	} else if opacity > 1.0 {
+		opacity = 1.0
+	}
+	// Opacity is between 0 (fully transparent) and 255 (fully opaque)
+	return uint8(opacity * float32(0xFF))
+}
+
+func rpi_dx_display(d gopi.Display) rpi.DX_DisplayHandle {
+	return d.(display.NativeDisplay).Handle()
+}
+
+func size_from_bitmap(bitmap gopi.Bitmap, size gopi.Size) gopi.Size {
+	if size == gopi.ZeroSize {
+		return bitmap.Size()
+	} else {
+		return size
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// UPDATES
+
+func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
+	if this.handle == nil {
+		return gopi.ErrBadParameter
+	}
+	if callback == nil {
+		return gopi.ErrBadParameter
+	}
+	if this.update != 0 {
+		return gopi.ErrOutOfOrder
+	}
+	// TODO rpi.DX_UPDATE_PRIORITY_DEFAULT
+	if update, err := rpi.DX_UpdateStart(0); err != nil {
+		return err
+	} else {
+		this.update = update
+		defer func() {
+			if rpi.DX_UpdateSubmitSync(update); err != nil {
+				this.log.Warn("Do: %v", err)
+			}
+			this.update = 0
+		}()
+		if err := callback(this); err != nil {
+			return err
+		}
+	}
+
+	// Return success
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// MOVE SURFACES
+
+func (this *manager) SetOrigin(s gopi.Surface, origin gopi.Point) error {
+	this.log.Debug2("<graphics.surfacemanager>SetOrigin{ surface=%v origin=%v }", s, origin)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	// Set origin
+	dx_origin := rpi.DX_Point{int32(origin.X), int32(origin.Y)}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if dest_rect := rpi.DX_NewRect(dx_origin.X, dx_origin.Y, surface_.native.size.W, surface_.native.size.H); dest_rect == nil {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_DEST_RECT, 0, 0, dest_rect, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.native.origin = dx_origin
+		return nil
+	}
+}
+
+func (this *manager) MoveOriginBy(s gopi.Surface, increment gopi.Point) error {
+	this.log.Debug2("<graphics.surfacemanager>MoveOriginBy{ surface=%v increment=%v }", s, increment)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if dest_rect := rpi.DX_NewRect(surface_.native.origin.X+int32(increment.X), surface_.native.origin.Y+int32(increment.Y), surface_.native.size.W, surface_.native.size.H); dest_rect == nil {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_DEST_RECT, 0, 0, dest_rect, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.native.origin = rpi.DX_RectOrigin(dest_rect)
+		return nil
+	}
+}
+
+func (this *manager) SetLayer(s gopi.Surface, layer uint16) error {
+	this.log.Debug2("<graphics.surfacemanager>SetLayer{ surface=%v layer=%v }", s, layer)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if s.Layer() == gopi.SURFACE_LAYER_BACKGROUND || s.Layer() == gopi.SURFACE_LAYER_CURSOR {
+		// Can't change background or cursor layers
+		return gopi.ErrBadParameter
+	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
+		// Invalid layer change
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_LAYER, layer, 0, nil, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.layer = layer
+		return nil
+	}
+}
+
+func (this *manager) SetOpacity(s gopi.Surface, opacity float32) error {
+	this.log.Debug2("<graphics.surfacemanager>SetOpacity{ surface=%v opacity=%v }", s, opacity)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if opacity < 0.0 || opacity > 1.0 {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_LAYER, 0, opacity_from_float(opacity), nil, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.opacity = opacity
+		return nil
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// UNIMPLEMENTED
+
+func (this *manager) SetSize(gopi.Surface, gopi.Size) error {
+	return gopi.ErrNotImplemented
+}
+
+func (this *manager) SetBitmap(gopi.Bitmap) error {
+	return gopi.ErrNotImplemented
+}

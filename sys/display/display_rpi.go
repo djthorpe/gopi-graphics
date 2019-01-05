@@ -34,6 +34,10 @@ type display struct {
 	modeinfo rpi.DX_DisplayModeInfo
 }
 
+type NativeDisplay interface {
+	Handle() rpi.DX_DisplayHandle
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
 
@@ -84,6 +88,11 @@ func (this *display) Close() error {
 // Display returns display number
 func (this *display) Display() uint {
 	return this.display
+}
+
+// Returns handle
+func (this *display) Handle() rpi.DX_DisplayHandle {
+	return this.handle
 }
 
 // Return size
