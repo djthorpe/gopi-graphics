@@ -35,7 +35,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 			return err
 		} else if err := gfx.Do(func(gopi.SurfaceManager) error {
 			// Create a surface and put it at { 50,50 }
-			if surface, err := gfx.CreateSurfaceWithBitmap(bitmap, gopi.SURFACE_FLAG_NONE, 0.5, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{}); err != nil {
+			if surface, err := gfx.CreateSurfaceWithBitmap(bitmap, gopi.SURFACE_FLAG_NONE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{}); err != nil {
 				return err
 			} else {
 				fmt.Println(bitmap)
