@@ -57,7 +57,7 @@ type surface struct {
 type bitmap struct {
 	log          gopi.Logger
 	surface_type gopi.SurfaceType
-	size         gopi.Size
+	size         rpi.DX_Size
 	handle       rpi.DX_Resource
 	stride       uint32
 }
@@ -108,13 +108,16 @@ func (this *manager) Close() error {
 		return nil
 	}
 
-	// TODO: Start Update
-
 	// Free Surfaces
-	for _, surface := range this.surfaces {
-		if err := this.DestroySurface(surface); err != nil {
-			return err
+	if err := this.Do(func(gopi.SurfaceManager) error {
+		for _, surface := range this.surfaces {
+			if err := this.DestroySurface(surface); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Free Bitmaps
@@ -323,6 +326,16 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	dest_rect := rpi.DX_NewRect(int32(origin.X), int32(origin.Y), uint32(size.W), uint32(size.H))
 	src_size := rpi.DX_RectSize(dest_rect)
 	dest_size := rpi.DX_RectSize(dest_rect)
+
+	// Check sizes
+	if src_size.W > 0xFFFF || src_size.H > 0xFFFF {
+		return nil, gopi.ErrBadParameter
+	}
+	if dest_size.W > 0xFFFF || dest_size.H > 0xFFFF {
+		return nil, gopi.ErrBadParameter
+	}
+
+	// Adjust size for source
 	src_size.W = src_size.W << 16
 	src_size.H = src_size.H << 16
 
@@ -335,8 +348,6 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 			src_resource = bitmap_.handle
 		}
 	}
-
-	fmt.Printf("dest_rect=%v src_size=%v src_resource=%X\n", dest_rect, src_size, src_resource)
 
 	// Create the element
 	if handle, err := rpi.DX_ElementAdd(this.update, rpi_dx_display(this.display), layer, dest_rect, src_resource, src_size, protection, alpha, clamp, transform); err != nil {
@@ -380,16 +391,19 @@ func (this *manager) CreateBitmap(api gopi.SurfaceType, flags gopi.SurfaceFlags,
 	if size.W <= 0.0 || size.H <= 0.0 {
 		return nil, gopi.ErrBadParameter
 	}
-	if handle, err := rpi.DX_ResourceCreate(rpi.DX_IMAGE_TYPE_RGBA32, rpi.DX_Size{uint32(size.W), uint32(size.H)}); err != nil {
+
+	// dx_size
+	dx_size := rpi.DX_Size{uint32(size.W), uint32(size.H)}
+	if handle, err := rpi.DX_ResourceCreate(rpi.DX_IMAGE_TYPE_RGBA32, dx_size); err != nil {
 		return nil, err
 	} else {
 		// Alignment on (4 x uint32) boundaries
 		b := &bitmap{
 			log:          this.log,
 			surface_type: api,
-			size:         size,
+			size:         dx_size,
 			handle:       handle,
-			stride:       rpi.DX_AlignUp(uint32(size.W), 16) * 4,
+			stride:       rpi.DX_AlignUp(dx_size.W, 16) * 4,
 		}
 		this.bitmaps = append(this.bitmaps, b)
 		return b, nil

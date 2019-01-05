@@ -11,6 +11,7 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 
 	// Frameworks
@@ -31,9 +32,11 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		return fmt.Errorf("Missing Surfaces Manager")
 	} else {
 		// Create a bitmap
-		if bitmap, err := gfx.CreateBitmap(gopi.SURFACE_TYPE_RGBA32, gopi.SURFACE_FLAG_NONE, gopi.Size{100, 100}); err != nil {
+		if bitmap, err := gfx.CreateBitmap(gopi.SURFACE_TYPE_RGBA32, gopi.SURFACE_FLAG_NONE, gopi.Size{250, 250}); err != nil {
 			return err
 		} else if err := gfx.Do(func(gopi.SurfaceManager) error {
+			// Clear bitmap
+			bitmap.ClearToColor(color.White)
 			// Create a surface and put it at { 50,50 }
 			if surface, err := gfx.CreateSurfaceWithBitmap(bitmap, gopi.SURFACE_FLAG_NONE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{}); err != nil {
 				return err
