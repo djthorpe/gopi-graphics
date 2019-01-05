@@ -29,11 +29,25 @@ import (
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 	if gfx := app.Graphics; gfx == nil {
 		return fmt.Errorf("Missing Surfaces Manager")
-	} else if surface, err := gfx.CreateSurface(gopi.SURFACE_TYPE_OPENVG, 0, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{0, 0}, gopi.Size{100, 100}); err != nil {
-		return err
 	} else {
-		fmt.Println(gfx)
-		fmt.Println(surface)
+		// Create a bitmap
+		if bitmap, err := gfx.CreateBitmap(gopi.SURFACE_TYPE_RGBA32, gopi.SURFACE_FLAG_NONE, gopi.Size{100, 100}); err != nil {
+			return err
+		} else if err := gfx.Do(func(gopi.SurfaceManager) error {
+			// Create a surface and put it at { 50,50 }
+			if surface, err := gfx.CreateSurfaceWithBitmap(bitmap, gopi.SURFACE_FLAG_NONE, 0.5, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{}); err != nil {
+				return err
+			} else {
+				fmt.Println(bitmap)
+				fmt.Println(surface)
+				return nil
+			}
+		}); err != nil {
+			return err
+		}
+
+		fmt.Println("Press CTRL+C to exit")
+		app.WaitForSignal()
 	}
 
 	return nil
