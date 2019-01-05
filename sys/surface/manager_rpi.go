@@ -305,7 +305,7 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 
 	// Set alpha
 	alpha := rpi.DX_Alpha{
-		Opacity: opacity_from_float(opacity),
+		Opacity: uint32(opacity_from_float(opacity)),
 	}
 	if flags&gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE != 0 {
 		alpha.Flags |= rpi.DX_ALPHA_FLAG_FROM_SOURCE
@@ -433,14 +433,14 @@ func egl_nativewindow(window *nativesurface) egl.EGL_NativeWindow {
 	return egl.EGL_NativeWindow(unsafe.Pointer(window))
 }
 
-func opacity_from_float(opacity float32) uint32 {
+func opacity_from_float(opacity float32) uint8 {
 	if opacity < 0.0 {
 		opacity = 0.0
 	} else if opacity > 1.0 {
 		opacity = 1.0
 	}
 	// Opacity is between 0 (fully transparent) and 255 (fully opaque)
-	return uint32(opacity * float32(0xFF))
+	return uint8(opacity * float32(0xFF))
 }
 
 func rpi_dx_display(d gopi.Display) rpi.DX_DisplayHandle {
@@ -538,18 +538,61 @@ func (this *manager) MoveOriginBy(s gopi.Surface, increment gopi.Point) error {
 	}
 }
 
+func (this *manager) SetLayer(s gopi.Surface, layer uint16) error {
+	this.log.Debug2("<graphics.surfacemanager>SetLayer{ surface=%v layer=%v }", s, layer)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if s.Layer() == gopi.SURFACE_LAYER_BACKGROUND || s.Layer() == gopi.SURFACE_LAYER_CURSOR {
+		// Can't change background or cursor layers
+		return gopi.ErrBadParameter
+	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
+		// Invalid layer change
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_LAYER, layer, 0, nil, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.layer = layer
+		return nil
+	}
+}
+
+func (this *manager) SetOpacity(s gopi.Surface, opacity float32) error {
+	this.log.Debug2("<graphics.surfacemanager>SetOpacity{ surface=%v opacity=%v }", s, opacity)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if opacity < 0.0 || opacity > 1.0 {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_LAYER, 0, opacity_from_float(opacity), nil, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.opacity = opacity
+		return nil
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // UNIMPLEMENTED
 
 func (this *manager) SetSize(gopi.Surface, gopi.Size) error {
 	return gopi.ErrNotImplemented
 }
-func (this *manager) SetLayer(gopi.Surface, uint16) error {
-	return gopi.ErrNotImplemented
-}
-func (this *manager) SetOpacity(gopi.Surface, float32) error {
-	return gopi.ErrNotImplemented
-}
+
 func (this *manager) SetBitmap(gopi.Bitmap) error {
 	return gopi.ErrNotImplemented
 }
