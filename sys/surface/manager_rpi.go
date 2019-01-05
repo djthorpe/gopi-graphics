@@ -45,8 +45,6 @@ type manager struct {
 type surface struct {
 	log          gopi.Logger
 	surface_type gopi.SurfaceType
-	size         gopi.Size
-	origin       gopi.Point
 	opacity      float32
 	layer        uint16
 	context      egl.EGL_Context
@@ -64,8 +62,8 @@ type bitmap struct {
 
 type nativesurface struct {
 	handle rpi.DX_Element
-	width  int
-	height int
+	size   rpi.DX_Size
+	origin rpi.DX_Point
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -225,8 +223,6 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 		s := &surface{
 			log:          this.log,
 			surface_type: api,
-			size:         size,
-			origin:       origin,
 			opacity:      opacity,
 			layer:        layer,
 			context:      context,
@@ -255,8 +251,6 @@ func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.Surf
 		s := &surface{
 			log:          this.log,
 			surface_type: bitmap.Type(),
-			size:         size,
-			origin:       origin,
 			opacity:      opacity,
 			layer:        layer,
 			native:       native_surface,
@@ -328,6 +322,7 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	dest_rect := rpi.DX_NewRect(int32(origin.X), int32(origin.Y), uint32(size.W), uint32(size.H))
 	src_size := rpi.DX_RectSize(dest_rect)
 	dest_size := rpi.DX_RectSize(dest_rect)
+	dest_origin := rpi.DX_RectOrigin(dest_rect)
 
 	// Check size - uint16
 	if src_size.W > 0xFFFF || src_size.H > 0xFFFF {
@@ -355,7 +350,7 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	if handle, err := rpi.DX_ElementAdd(this.update, rpi_dx_display(this.display), layer, dest_rect, src_resource, src_size, protection, alpha, clamp, transform); err != nil {
 		return nil, err
 	} else {
-		return &nativesurface{handle, int(dest_size.W), int(dest_size.H)}, nil
+		return &nativesurface{handle, dest_size, dest_origin}, nil
 	}
 }
 
@@ -494,14 +489,58 @@ func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// MOVE SURFACES
+
+func (this *manager) SetOrigin(s gopi.Surface, origin gopi.Point) error {
+	this.log.Debug2("<graphics.surfacemanager>SetOrigin{ surface=%v origin=%v }", s, origin)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	// Set origin
+	dx_origin := rpi.DX_Point{int32(origin.X), int32(origin.Y)}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if dest_rect := rpi.DX_NewRect(dx_origin.X, dx_origin.Y, surface_.native.size.W, surface_.native.size.H); dest_rect == nil {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_DEST_RECT, 0, 0, dest_rect, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.native.origin = dx_origin
+		return nil
+	}
+}
+
+func (this *manager) MoveOriginBy(s gopi.Surface, increment gopi.Point) error {
+	this.log.Debug2("<graphics.surfacemanager>MoveOriginBy{ surface=%v increment=%v }", s, increment)
+
+	// If no update, then return out of order error
+	this.Lock()
+	defer this.Unlock()
+	if this.update == 0 {
+		return gopi.ErrOutOfOrder
+	}
+
+	if surface_, ok := s.(*surface); ok == false {
+		return gopi.ErrBadParameter
+	} else if dest_rect := rpi.DX_NewRect(surface_.native.origin.X+int32(increment.X), surface_.native.origin.Y+int32(increment.Y), surface_.native.size.W, surface_.native.size.H); dest_rect == nil {
+		return gopi.ErrBadParameter
+	} else if err := rpi.DX_ElementChangeAttributes(this.update, surface_.native.handle, rpi.DX_CHANGE_FLAG_DEST_RECT, 0, 0, dest_rect, nil, 0); err != nil {
+		return err
+	} else {
+		surface_.native.origin = rpi.DX_RectOrigin(dest_rect)
+		return nil
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // UNIMPLEMENTED
 
-func (this *manager) SetOrigin(gopi.Surface, gopi.Point) error {
-	return gopi.ErrNotImplemented
-}
-func (this *manager) MoveOriginBy(gopi.Surface, gopi.Point) error {
-	return gopi.ErrNotImplemented
-}
 func (this *manager) SetSize(gopi.Surface, gopi.Size) error {
 	return gopi.ErrNotImplemented
 }

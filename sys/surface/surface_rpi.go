@@ -26,11 +26,11 @@ func (this *surface) Type() gopi.SurfaceType {
 }
 
 func (this *surface) Size() gopi.Size {
-	return this.size
+	return gopi.Size{float32(this.native.size.W), float32(this.native.size.H)}
 }
 
 func (this *surface) Origin() gopi.Point {
-	return this.origin
+	return gopi.Point{float32(this.native.origin.X), float32(this.native.origin.Y)}
 }
 
 func (this *surface) Opacity() float32 {
@@ -45,5 +45,5 @@ func (this *surface) Layer() uint16 {
 // STRINGIFY
 
 func (this *surface) String() string {
-	return fmt.Sprintf("<graphics.surface>{ id=0x%08X type=%v size=%v origin=%v opacity=%v layer=%v }", this.native.handle, this.surface_type, this.size, this.origin, this.opacity, this.layer)
+	return fmt.Sprintf("<graphics.surface>{ id=0x%08X type=%v size=%v origin=%v opacity=%v layer=%v }", this.native.handle, this.surface_type, this.native.size, this.native.origin, this.opacity, this.layer)
 }

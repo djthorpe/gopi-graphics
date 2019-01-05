@@ -68,6 +68,5 @@ func rgba_to_uint32(value color.RGBA) uint32 {
 
 func color_to_uint32(value color.Color) uint32 {
 	r, g, b, a := value.RGBA()
-	fmt.Println(r, g, b, a)
 	return uint32(a&0xFFFF>>8)<<24 | uint32(b&0xFFFF>>8)<<16 | uint32(g&0xFFFF>>8)<<8 | uint32(r&0xFFFF>>8)
 }

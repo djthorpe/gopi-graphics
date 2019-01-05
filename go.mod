@@ -2,7 +2,7 @@ module github.com/djthorpe/gopi-graphics
 
 require (
 	github.com/djthorpe/gopi v1.0.42
-	github.com/djthorpe/gopi-hw v1.0.20
+	github.com/djthorpe/gopi-hw v1.0.21
 	github.com/golang/lint v0.0.0-20181217174547-8f45f776aaf1 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/miekg/dns v1.1.2 // indirect
