@@ -19,51 +19,14 @@ import (
 
 	// Modules
 	_ "github.com/djthorpe/gopi-graphics/sys/display"
+	_ "github.com/djthorpe/gopi-graphics/sys/sprites"
 	_ "github.com/djthorpe/gopi-graphics/sys/surface"
 	_ "github.com/djthorpe/gopi-hw/sys/hw"
 	_ "github.com/djthorpe/gopi-hw/sys/metrics"
 	_ "github.com/djthorpe/gopi/sys/logger"
 )
 
-type sprites struct {
-	log gopi.Logger
-}
-
-func (this *sprites) OpenSpritesAtPath(path string, callback func(manager *sprites, path string, info os.FileInfo) bool) error {
-	this.log.Debug2("<sprites.OpenFacesAtPath{ path=%v }", path)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return err
-	}
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if info == nil {
-			return nil
-		}
-		if callback(this, path, info) == false {
-			if info.IsDir() {
-				return filepath.SkipDir
-			} else {
-				return nil
-			}
-		}
-		if info.IsDir() {
-			return nil
-		}
-		// Open sprite
-		if _, err := this.Open(path); err != nil {
-			return err
-		}
-		// Success
-		return nil
-	})
-	return err
-}
-
-func (this *sprites) Open(path string) (gopi.Bitmap, error) {
-	this.log.Debug("<sprites>Open{ path=%v }", path)
-	return nil, nil
-}
-
-func FilterFiles(manager *sprites, path string, info os.FileInfo) bool {
+func FilterFiles(manager gopi.SpriteManager, path string, info os.FileInfo) bool {
 	if info.IsDir() {
 		// Recurse into subfolders
 		return true
@@ -76,11 +39,11 @@ func FilterFiles(manager *sprites, path string, info os.FileInfo) bool {
 }
 
 func Main(app *gopi.AppInstance, done chan<- struct{}) error {
-	path, _ := app.AppFlags.GetString("sprites.path")
-	s := &sprites{
-		log: app.Logger,
-	}
-	if err := s.OpenSpritesAtPath(path, FilterFiles); err != nil {
+	if path, exists := app.AppFlags.GetString("sprites.path"); exists == false {
+		return fmt.Errorf("Missing -sprites.path argument")
+	} else if sprites, ok := app.ModuleInstance("graphics/sprites").(gopi.SpriteManager); ok == false {
+		return fmt.Errorf("Invalid graphics/sprites component")
+	} else if err := sprites.OpenSpritesAtPath(path, FilterFiles); err != nil {
 		return err
 	}
 
@@ -92,7 +55,7 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("graphics")
+	config := gopi.NewAppConfig("graphics/sprites")
 	config.AppFlags.FlagString("sprites.path", "", "Path for sprites")
 
 	// Run the command line tool
