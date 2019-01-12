@@ -36,17 +36,14 @@ func Background(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct
 	var surface1, surface2 gopi.Surface
 
 	// Create a 2x2 bitmap and place on the screen
-	if bitmap1, err := gfx.CreateBitmap(0, gopi.Size{2, 2}); err != nil {
+	if bitmap1, err := gfx.CreateBitmap(gopi.SURFACE_FLAG_BITMAP, gopi.Size{2, 2}); err != nil {
 		return err
-	} else if bitmap2, err := gfx.CreateBitmap(0, gopi.Size{2, 2}); err != nil {
+	} else if bitmap2, err := gfx.CreateBitmap(gopi.SURFACE_FLAG_BITMAP, gopi.Size{2, 2}); err != nil {
 		return err
 	} else if err := gfx.Do(func(gopi.SurfaceManager) error {
-		// Clear bitmaps
+		// Clear bitmaps to partly translucent color
 		bitmap1.ClearToColor(gopi.Color{255, 0, 0, 200})
 		bitmap2.ClearToColor(gopi.Color{0, 0, 255, 200})
-
-		fmt.Println("bitmap1", bitmap1)
-		fmt.Println("bitmap2", bitmap2)
 
 		// Create surfaces
 		if s, err := gfx.CreateSurfaceWithBitmap(bitmap1, gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{50, 50}, gopi.Size{250, 250}); err != nil {
@@ -68,7 +65,7 @@ func Background(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct
 	start <- gopi.DONE
 
 	// Move bitmap once per second
-	timer := time.NewTicker(time.Millisecond * 100)
+	timer := time.NewTicker(time.Millisecond * 1)
 FOR_LOOP:
 	for {
 		select {

@@ -25,7 +25,7 @@ import (
 // IMPLEMENTATION
 
 func (this *bitmap) Type() gopi.SurfaceFlags {
-	return this.flags.Type()
+	return this.flags.Config()
 }
 
 func (this *bitmap) Size() gopi.Size {
@@ -62,7 +62,7 @@ func (this *bitmap) FillRectToColor(gopi.Point, gopi.Size, gopi.Color) error {
 // STRINGIFY
 
 func (this *bitmap) String() string {
-	return fmt.Sprintf("<graphics.bitmap>{ id=0x%08X flags=%v size=%v stride=%v }", this.handle, this.flags, this.size, this.stride)
+	return fmt.Sprintf("<graphics.bitmap>{ id=0x%08X type=%v size=%v stride=%v }", this.handle, this.flags.ConfigString(), this.size, this.stride)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
