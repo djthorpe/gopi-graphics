@@ -24,8 +24,8 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // IMPLEMENTATION
 
-func (this *bitmap) Type() gopi.SurfaceType {
-	return this.surface_type
+func (this *bitmap) Type() gopi.SurfaceFlags {
+	return this.flags.Type()
 }
 
 func (this *bitmap) Size() gopi.Size {
@@ -43,7 +43,7 @@ func (this *bitmap) ClearToColorRGBA(c color.RGBA) error {
 	return rpi.DX_ResourceWriteData(this.handle, rpi.DX_IMAGE_TYPE_RGBA32, this.stride, ptr, rect)
 }
 
-func (this *bitmap) ClearToColor(c color.Color) error {
+func (this *bitmap) ClearToColor(c gopi.Color) error {
 	data := make([]uint32, this.stride>>2*uint32(this.size.H))
 	value := color_to_uint32(c)
 	for i := 0; i < len(data); i++ {
@@ -54,11 +54,15 @@ func (this *bitmap) ClearToColor(c color.Color) error {
 	return rpi.DX_ResourceWriteData(this.handle, rpi.DX_IMAGE_TYPE_RGBA32, this.stride, ptr, rect)
 }
 
+func (this *bitmap) FillRectToColor(gopi.Point, gopi.Size, gopi.Color) error {
+	return gopi.ErrNotImplemented
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // STRINGIFY
 
 func (this *bitmap) String() string {
-	return fmt.Sprintf("<graphics.bitmap>{ id=0x%08X type=%v size=%v stride=%v }", this.handle, this.surface_type, this.size, this.stride)
+	return fmt.Sprintf("<graphics.bitmap>{ id=0x%08X flags=%v size=%v stride=%v }", this.handle, this.flags, this.size, this.stride)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -10,12 +10,14 @@
 package sprites
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
+	"github.com/djthorpe/gopi/util/errors"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,11 +59,15 @@ func (this *manager) Close() error {
 // IMPLEMENTATION
 
 func (this *manager) OpenSpritesAtPath(path string, callback func(manager gopi.SpriteManager, path string, info os.FileInfo) bool) error {
-	this.log.Debug2("<graphics.sprites>OpenFacesAtPath{ path=%v }", path)
+	this.log.Debug2("<graphics.sprites>OpenSpritesAtPath{ path=%v }", path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return err
 	}
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+
+	errs := new(errors.CompoundError)
+	fmt.Printf("XX=%v\n", errs == nil)
+
+	errs.Add(filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if info == nil {
 			return nil
 		}
@@ -76,18 +82,23 @@ func (this *manager) OpenSpritesAtPath(path string, callback func(manager gopi.S
 			return nil
 		}
 		// Open sprite file
-		if handle, err := os.Open(path); err != nil {
-			return err
+		if handle, err_ := os.Open(path); err_ != nil {
+			// Allow execution to continue
+			errs.Add(fmt.Errorf("%v: %v", path, err_))
 		} else {
 			defer handle.Close()
-			if _, err := this.OpenSprites(handle); err != nil {
-				return err
+			if _, err_ := this.OpenSprites(handle); err_ != nil {
+				// Allow execution to continue
+				errs.Add(fmt.Errorf("%v: %v", path, err_))
 			}
 		}
 		// Success
 		return nil
-	})
-	return err
+	}))
+
+	fmt.Println(errs)
+
+	return errs.ErrorOrSelf()
 }
 
 // Open one or more sprites from a stream and return them
