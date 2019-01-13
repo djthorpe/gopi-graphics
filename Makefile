@@ -4,20 +4,21 @@ GOFLAGS=-v -tags "rpi"
 GOINSTALL=$(GOCMD) install $(GOFLAGS)
 GOTEST=$(GOCMD) test $(GOFLAGS) 
 GOCLEAN=$(GOCMD) clean
+PKG_CONFIG_PATH="/opt/vc/lib/pkgconfig"
 
 all: surface_test font_list display_list
 
-pkg-config:
-	PKG_CONFIG_PATH="/opt/vc/lib/pkgconfig"
+surface_test:
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(GOINSTALL) ./cmd/surface_test
 
-surface_test: pkg-config
-	$(GOINSTALL) ./cmd/surface_test
+sprite_test:
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(GOINSTALL) ./cmd/sprite_test
 
-font_list: pkg-config
-	$(GOINSTALL) ./cmd/font_list
+font_list:
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(GOINSTALL) ./cmd/font_list
 
-display_list: pkg-config
-	$(GOINSTALL) ./cmd/display_list
+display_list:
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(GOINSTALL) ./cmd/display_list
 
 clean: 
 	$(GOCLEAN)

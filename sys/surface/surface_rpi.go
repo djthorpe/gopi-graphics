@@ -21,8 +21,8 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // IMPLEMENTATION
 
-func (this *surface) Type() gopi.SurfaceType {
-	return this.surface_type
+func (this *surface) Type() gopi.SurfaceFlags {
+	return this.flags.Type()
 }
 
 func (this *surface) Size() gopi.Size {
@@ -45,5 +45,5 @@ func (this *surface) Layer() uint16 {
 // STRINGIFY
 
 func (this *surface) String() string {
-	return fmt.Sprintf("<graphics.surface>{ id=0x%08X type=%v size=%v origin=%v opacity=%v layer=%v }", this.native.handle, this.surface_type, this.native.size, this.native.origin, this.opacity, this.layer)
+	return fmt.Sprintf("<graphics.surface>{ id=0x%08X flags=%v size=%v origin=%v opacity=%v layer=%v }", this.native.handle, this.flags, this.native.size, this.native.origin, this.opacity, this.layer)
 }

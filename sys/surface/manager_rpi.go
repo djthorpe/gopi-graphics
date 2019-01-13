@@ -43,21 +43,38 @@ type manager struct {
 }
 
 type surface struct {
-	log          gopi.Logger
-	surface_type gopi.SurfaceType
-	opacity      float32
-	layer        uint16
-	context      egl.EGL_Context
-	handle       egl.EGL_Surface
-	native       *nativesurface
+	log     gopi.Logger
+	flags   gopi.SurfaceFlags
+	opacity float32
+	layer   uint16
+	context egl.EGL_Context
+	handle  egl.EGL_Surface
+	native  *nativesurface
+	bitmap  gopi.Bitmap
 }
 
 type bitmap struct {
-	log          gopi.Logger
-	surface_type gopi.SurfaceType
-	size         rpi.DX_Size
-	handle       rpi.DX_Resource
-	stride       uint32
+	log             gopi.Logger
+	flags           gopi.SurfaceFlags
+	size            rpi.DX_Size
+	handle          rpi.DX_Resource
+	stride          uint32
+	image_type      rpi.DX_ImageType
+	bytes_per_pixel uint32
+	ref             uint
+	sync.Mutex
+}
+
+type bitmap_rgba struct {
+	bitmap
+}
+
+type bitmap_888 struct {
+	bitmap
+}
+
+type bitmap_565 struct {
+	bitmap
 }
 
 type nativesurface struct {
@@ -94,6 +111,7 @@ func (config SurfaceManager) Open(log gopi.Logger) (gopi.Driver, error) {
 
 	// Create surface array
 	this.surfaces = make([]*surface, 0)
+	this.bitmaps = make([]*bitmap, 0)
 
 	return this, nil
 }
@@ -163,19 +181,19 @@ func (this *manager) Extensions() []string {
 	}
 }
 
-func (this *manager) Types() []gopi.SurfaceType {
+func (this *manager) Types() []gopi.SurfaceFlags {
 	if this.handle == nil {
 		return nil
 	}
 	types := strings.Split(egl.EGL_QueryString(this.handle, egl.EGL_QUERY_CLIENT_APIS), " ")
-	surface_types := make([]gopi.SurfaceType, 0, len(types))
+	surface_types := make([]gopi.SurfaceFlags, 0, len(types))
 	for _, t := range types {
 		if t_, ok := egl.EGL_SurfaceTypeMap[t]; ok {
 			surface_types = append(surface_types, t_)
 		}
 	}
-	// always include RGBA32
-	return append(surface_types, gopi.SURFACE_TYPE_RGBA32)
+	// always include bitmaps
+	return append(surface_types, gopi.SURFACE_FLAG_BITMAP)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -192,10 +210,46 @@ func (this *manager) String() string {
 ////////////////////////////////////////////////////////////////////////////////
 // SURFACES
 
-func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
-	this.log.Debug2("<graphics.surfacemanager>CreateSurface{ api=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", api, flags, opacity, layer, origin, size)
+func (this *manager) CreateSurface(flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateSurface{ flags=%v opacity=%v layer=%v origin=%v size=%v }", flags, opacity, layer, origin, size)
 
-	// Create EGL context with 8 bits per pixel, 8 bits for Alpha
+	// api
+	api := flags.Type()
+
+	// if Bitmap, then create a bitmap
+	if api == gopi.SURFACE_FLAG_BITMAP {
+		if bitmap, err := this.CreateBitmap(flags, size); err != nil {
+			return nil, err
+		} else if surface, err := this.CreateSurfaceWithBitmap(bitmap, flags, opacity, layer, origin, size); err != nil {
+			return nil, err
+		} else {
+			return surface, nil
+		}
+	}
+
+	// Choose r,g,b,a bits per pixel
+	var r, g, b, a uint
+	switch flags.Config() {
+	case gopi.SURFACE_FLAG_RGB565:
+		r = 5
+		g = 6
+		b = 5
+		a = 0
+	case gopi.SURFACE_FLAG_RGBA32:
+		r = 8
+		g = 8
+		b = 8
+		a = 8
+	case gopi.SURFACE_FLAG_RGB888:
+		r = 8
+		g = 8
+		b = 8
+		a = 0
+	default:
+		return nil, gopi.ErrNotImplemented
+	}
+
+	// Create EGL context
 	if api_, exists := egl.EGL_APIMap[api]; exists == false {
 		return nil, gopi.ErrBadParameter
 	} else if renderable_, exists := egl.EGL_RenderableMap[api]; exists == false {
@@ -206,7 +260,7 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 		return nil, gopi.ErrBadParameter
 	} else if err := egl.EGL_BindAPI(api_); err != nil {
 		return nil, err
-	} else if config, err := egl.EGL_ChooseConfig(this.handle, 8, 8, egl.EGL_SURFACETYPE_FLAG_WINDOW, renderable_); err != nil {
+	} else if config, err := egl.EGL_ChooseConfig(this.handle, r, g, b, a, egl.EGL_SURFACETYPE_FLAG_WINDOW, renderable_); err != nil {
 		return nil, err
 	} else if native_surface, err := this.CreateNativeSurface(nil, flags, opacity, layer, origin, size); err != nil {
 		return nil, err
@@ -221,13 +275,13 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 		return nil, err
 	} else {
 		s := &surface{
-			log:          this.log,
-			surface_type: api,
-			opacity:      opacity,
-			layer:        layer,
-			context:      context,
-			handle:       handle,
-			native:       native_surface,
+			log:     this.log,
+			flags:   flags,
+			opacity: opacity,
+			layer:   layer,
+			context: context,
+			handle:  handle,
+			native:  native_surface,
 		}
 		this.surfaces = append(this.surfaces, s)
 		return s, nil
@@ -235,8 +289,8 @@ func (this *manager) CreateSurface(api gopi.SurfaceType, flags gopi.SurfaceFlags
 }
 
 func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
+	flags = gopi.SURFACE_FLAG_BITMAP | bitmap.Type() | flags.Mod()
 	this.log.Debug2("<graphics.surfacemanager>CreateSurfaceWithBitmap{ bitmap=%v flags=%v opacity=%v layer=%v origin=%v size=%v }", bitmap, flags, opacity, layer, origin, size)
-
 	if opacity < 0.0 || opacity > 1.0 {
 		return nil, gopi.ErrBadParameter
 	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
@@ -248,12 +302,14 @@ func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.Surf
 	} else if native_surface, err := this.CreateNativeSurface(bitmap, flags, opacity, layer, origin, size); err != nil {
 		return nil, err
 	} else {
+		// Return the surface
 		s := &surface{
-			log:          this.log,
-			surface_type: bitmap.Type(),
-			opacity:      opacity,
-			layer:        layer,
-			native:       native_surface,
+			log:     this.log,
+			flags:   flags,
+			opacity: opacity,
+			layer:   layer,
+			native:  native_surface,
+			bitmap:  bitmap,
 		}
 		this.surfaces = append(this.surfaces, s)
 		return s, nil
@@ -307,7 +363,7 @@ func (this *manager) CreateNativeSurface(b gopi.Bitmap, flags gopi.SurfaceFlags,
 	alpha := rpi.DX_Alpha{
 		Opacity: uint32(opacity_from_float(opacity)),
 	}
-	if flags&gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE != 0 {
+	if flags.Mod()&gopi.SURFACE_FLAG_ALPHA_FROM_SOURCE != 0 {
 		alpha.Flags |= rpi.DX_ALPHA_FLAG_FROM_SOURCE
 	} else {
 		alpha.Flags |= rpi.DX_ALPHA_FLAG_FIXED_ALL_PIXELS
@@ -378,33 +434,46 @@ func (this *manager) DestroyNativeSurface(native *nativesurface) error {
 ////////////////////////////////////////////////////////////////////////////////
 // BITMAPS
 
-func (this *manager) CreateBitmap(api gopi.SurfaceType, flags gopi.SurfaceFlags, size gopi.Size) (gopi.Bitmap, error) {
-	this.log.Debug2("<graphics.surfacemanager>CreateBitmap{ api=%v flags=%v size=%v }", api, flags, size)
+func (this *manager) CreateBitmap(flags gopi.SurfaceFlags, size gopi.Size) (gopi.Bitmap, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateBitmap{ flags=%v size=%v }", flags, size)
 
 	// Check parameters
-	if api != gopi.SURFACE_TYPE_RGBA32 {
+	if flags.Type() != gopi.SURFACE_FLAG_BITMAP {
+		return nil, gopi.ErrBadParameter
+	} else if size.W <= 0.0 || size.H <= 0.0 {
 		return nil, gopi.ErrBadParameter
 	}
-	if size.W <= 0.0 || size.H <= 0.0 {
-		return nil, gopi.ErrBadParameter
+
+	// Create bitmap
+	b := &bitmap{
+		log:   this.log,
+		size:  rpi.DX_Size{uint32(size.W), uint32(size.H)},
+		flags: gopi.SURFACE_FLAG_BITMAP | flags.Config(),
+	}
+	switch flags.Config() {
+	case gopi.SURFACE_FLAG_RGBA32:
+		b.image_type = rpi.DX_IMAGE_TYPE_RGBA32
+		b.bytes_per_pixel = 4
+	case gopi.SURFACE_FLAG_RGB888:
+		b.image_type = rpi.DX_IMAGE_TYPE_RGB888
+		b.bytes_per_pixel = 3
+	case gopi.SURFACE_FLAG_RGB565:
+		b.image_type = rpi.DX_IMAGE_TYPE_RGB565
+		b.bytes_per_pixel = 2
+	default:
+		return nil, gopi.ErrNotImplemented
 	}
 
 	// Create resource
-	dx_size := rpi.DX_Size{uint32(size.W), uint32(size.H)}
-	if handle, err := rpi.DX_ResourceCreate(rpi.DX_IMAGE_TYPE_RGBA32, dx_size); err != nil {
+	if handle, err := rpi.DX_ResourceCreate(b.image_type, b.size); err != nil {
 		return nil, err
 	} else {
-		// Alignment on boundaries
-		b := &bitmap{
-			log:          this.log,
-			surface_type: api,
-			size:         dx_size,
-			handle:       handle,
-			stride:       rpi.DX_AlignUp(dx_size.W, 16) * 4,
-		}
+		b.handle = handle
+		b.stride = rpi.DX_AlignUp(b.size.W, 16) * b.bytes_per_pixel
 		this.bitmaps = append(this.bitmaps, b)
 		return b, nil
 	}
+
 }
 
 func (this *manager) DestroyBitmap(b gopi.Bitmap) error {
@@ -412,18 +481,34 @@ func (this *manager) DestroyBitmap(b gopi.Bitmap) error {
 
 	if bitmap_, ok := b.(*bitmap); ok == false {
 		return gopi.ErrBadParameter
-	} else {
-		if bitmap_.handle != 0 {
-			if err := rpi.DX_ResourceDelete(bitmap_.handle); err != nil {
-				return err
-			} else {
-				bitmap_.handle = 0
-			}
+	} else if bitmap_.handle != 0 {
+		if err := rpi.DX_ResourceDelete(bitmap_.handle); err != nil {
+			return err
+		} else {
+			bitmap_.handle = 0
 		}
 	}
 
 	// Success
 	return nil
+}
+
+func (this *manager) CreateSnapshot(flags gopi.SurfaceFlags) (gopi.Bitmap, error) {
+	flags = gopi.SURFACE_FLAG_BITMAP | flags.Config() | flags.Mod()
+	w, h := this.Display().Size()
+	size := gopi.Size{float32(w), float32(h)}
+
+	this.log.Debug2("<graphics.surfacemanager>CreateSnapshot{ flags=%v size=%v }", flags, size)
+
+	if b, err := this.CreateBitmap(flags, size); err != nil {
+		return nil, err
+	} else if bitmap_, ok := b.(*bitmap); ok == false {
+		return nil, gopi.ErrAppError
+	} else if err := rpi.DX_DisplaySnapshot(rpi_dx_display(this.display), bitmap_.handle, rpi.DX_TRANSFORM_NONE); err != nil {
+		return nil, err
+	} else {
+		return bitmap_, nil
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
