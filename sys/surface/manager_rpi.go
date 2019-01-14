@@ -212,7 +212,15 @@ func (this *manager) String() string {
 
 func (this *manager) CreateSurface(flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
 	this.log.Debug2("<graphics.surfacemanager>CreateSurface{ flags=%v opacity=%v layer=%v origin=%v size=%v }", flags, opacity, layer, origin, size)
+	// Check layer parameter
+	if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
+		return nil, gopi.ErrBadParameter
+	}
+	// Return surface
+	return this.CreateSurface_(flags, opacity, layer, origin, size)
+}
 
+func (this *manager) CreateSurface_(flags gopi.SurfaceFlags, opacity float32, layer uint16, origin gopi.Point, size gopi.Size) (gopi.Surface, error) {
 	// api
 	api := flags.Type()
 
@@ -255,8 +263,6 @@ func (this *manager) CreateSurface(flags gopi.SurfaceFlags, opacity float32, lay
 	} else if renderable_, exists := egl.EGL_RenderableMap[api]; exists == false {
 		return nil, gopi.ErrBadParameter
 	} else if opacity < 0.0 || opacity > 1.0 {
-		return nil, gopi.ErrBadParameter
-	} else if layer < gopi.SURFACE_LAYER_DEFAULT || layer > gopi.SURFACE_LAYER_MAX {
 		return nil, gopi.ErrBadParameter
 	} else if err := egl.EGL_BindAPI(api_); err != nil {
 		return nil, err
@@ -314,6 +320,17 @@ func (this *manager) CreateSurfaceWithBitmap(bitmap gopi.Bitmap, flags gopi.Surf
 		this.surfaces = append(this.surfaces, s)
 		return s, nil
 	}
+}
+
+func (this *manager) CreateBackground(flags gopi.SurfaceFlags, opacity float32) (gopi.Surface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateBackground{ flags=%v opacity=%v }", flags, opacity)
+	w, h := this.Display().Size()
+	return this.CreateSurface_(flags, opacity, gopi.SURFACE_LAYER_BACKGROUND, gopi.ZeroPoint, gopi.Size{float32(w), float32(h)})
+}
+
+func (this *manager) CreateCursor(cursor gopi.Sprite, flags gopi.SurfaceFlags, origin gopi.Point) (gopi.Surface, error) {
+	this.log.Debug2("<graphics.surfacemanager>CreateCursor{ cursor=%v flags=%v origin=%v }", cursor, flags, origin)
+	return nil, gopi.ErrNotImplemented
 }
 
 func (this *manager) DestroySurface(s gopi.Surface) error {

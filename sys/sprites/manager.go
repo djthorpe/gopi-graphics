@@ -10,10 +10,12 @@
 package sprites
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	// Frameworks
 	gopi "github.com/djthorpe/gopi"
@@ -31,6 +33,13 @@ type manager struct {
 	log      gopi.Logger
 	graphics gopi.SurfaceManager
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// CONSTANTS
+
+const (
+	LINESTATE_INIT = iota
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 // OPEN AND CLOSE
@@ -65,7 +74,6 @@ func (this *manager) OpenSpritesAtPath(path string, callback func(manager gopi.S
 	}
 
 	errs := new(errors.CompoundError)
-	fmt.Printf("XX=%v\n", errs == nil)
 
 	errs.Add(filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if info == nil {
@@ -96,14 +104,23 @@ func (this *manager) OpenSpritesAtPath(path string, callback func(manager gopi.S
 		return nil
 	}))
 
-	fmt.Println(errs)
-
 	return errs.ErrorOrSelf()
 }
 
 // Open one or more sprites from a stream and return them
-func (this *manager) OpenSprites(io.Reader) ([]gopi.Sprite, error) {
-	return nil, gopi.ErrNotImplemented
+func (this *manager) OpenSprites(handle io.Reader) ([]gopi.Sprite, error) {
+	// Read line by line
+	scanner := bufio.NewScanner(handle)
+	state := LINESTATE_INIT
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Ignore comments
+		if strings.HasPrefix(line, "//") && state == LINESTATE_INIT {
+			continue
+		}
+		fmt.Println(line)
+	}
+	return nil, nil
 }
 
 // Return loaded sprites, or a specific sprite
