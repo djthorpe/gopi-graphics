@@ -4,7 +4,8 @@
 // w = white
 // . = transparent
 
-pointer_nw
+Name: pointer_nw
+Type: RGBA32
 ................
 ..Bb............
 ..bwb...........
