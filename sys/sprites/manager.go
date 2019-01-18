@@ -33,6 +33,7 @@ type SpriteManager struct {
 type manager struct {
 	log      gopi.Logger
 	graphics gopi.SurfaceManager
+	sprites  map[string]gopi.Sprite
 }
 
 type sprite struct {
@@ -79,9 +80,16 @@ var (
 func (config SpriteManager) Open(log gopi.Logger) (gopi.Driver, error) {
 	log.Debug("<graphics.sprites>Open{ graphics=%v }", config.Graphics)
 
+	// Check parameters
+	if config.Graphics == nil {
+		log.Warn("graphics.sprites: Missing surface manager")
+		return nil, gopi.ErrBadParameter
+	}
+
 	this := new(manager)
 	this.log = log
 	this.graphics = config.Graphics
+	this.sprites = make(map[string]gopi.Sprite, 0)
 
 	return this, nil
 }
@@ -91,9 +99,21 @@ func (this *manager) Close() error {
 
 	// Free resources
 	this.graphics = nil
+	this.sprites = nil
 
 	// Return success
 	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// STRINGIFY
+
+func (this *manager) String() string {
+	parts := make([]string, 0, len(this.sprites))
+	for _, sprite := range this.sprites {
+		parts = append(parts, fmt.Sprint(sprite))
+	}
+	return fmt.Sprintf("<graphics.sprites>{ %v }", strings.Join(parts, ","))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,10 +218,12 @@ func (this *manager) OpenSprites(handle io.Reader) ([]gopi.Sprite, error) {
 	for _, sprite_ := range sprites {
 		if err := sprite_.(*sprite).create(this.graphics); err != nil {
 			return nil, err
+		} else if name := sprite_.Name(); len(name) == 0 {
+			return nil, fmt.Errorf("Sprite with missing name")
+		} else if _, exists := this.sprites[name]; exists {
+			return nil, fmt.Errorf("Duplicate sprite named '%v'", name)
 		} else {
-			// TODO: Add sprites to array of sprites, making sure
-			// the names are unique
-			fmt.Println(sprite_)
+			this.sprites[name] = sprite_
 		}
 	}
 
@@ -211,7 +233,18 @@ func (this *manager) OpenSprites(handle io.Reader) ([]gopi.Sprite, error) {
 
 // Return loaded sprites, or a specific sprite
 func (this *manager) Sprites(name string) []gopi.Sprite {
-	return nil
+	if name != "" {
+		if sprite, exists := this.sprites[name]; exists {
+			return []gopi.Sprite{sprite}
+		} else {
+			return nil
+		}
+	}
+	sprites := make([]gopi.Sprite, 0, len(this.sprites))
+	for _, sprite := range this.sprites {
+		sprites = append(sprites, sprite)
+	}
+	return sprites
 }
 
 func image_type_from(value string) gopi.SurfaceFlags {

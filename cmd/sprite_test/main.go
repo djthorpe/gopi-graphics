@@ -45,6 +45,16 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 		return fmt.Errorf("Invalid graphics/sprites component")
 	} else if err := sprites.OpenSpritesAtPath(path, FilterFiles); err != nil {
 		return err
+	} else {
+		if sprite := sprites.Sprites("pointer_nw"); len(sprite) == 1 {
+			app.Graphics.Do(func(gfx gopi.SurfaceManager) error {
+				if _, err := gfx.CreateSurfaceWithBitmap(sprite[0], 0, 1.0, 67, gopi.Point{1, 1}, gopi.ZeroSize); err != nil {
+					return err
+				} else {
+					return nil
+				}
+			})
+		}
 	}
 
 	fmt.Println("Waiting for CTRL+C")

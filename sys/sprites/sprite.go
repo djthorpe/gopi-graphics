@@ -136,25 +136,26 @@ func (this *sprite) create(gfx gopi.SurfaceManager) error {
 func (this *sprite) FillBitmap(bitmap gopi.Bitmap) error {
 
 	// Clear bitmap to transparent/black
-	if err := bitmap.ClearToColor(gopi.Color{0.0, 0.0, 0.0, 0.0}); err != nil {
+	if err := bitmap.ClearToColor(gopi.ColorWhite); err != nil {
 		return err
 	}
-
-	// Stick the pixels into the bitmap
-	for y, line := range this.pixels {
-		for x, pixel := range line {
-			// Currently we use the 'mask' bit to set transparency on the
-			// pixel but it will only work with RGBA32 - for other types
-			// of image we'll need to create a separate mask for the bitmap
-			color := pixel.color
-			if pixel.mask {
-				color.A = 0.0
-			}
-			if err := bitmap.PaintPixel(color, gopi.Point{float32(x), float32(y)}); err != nil {
-				return err
+	/*
+		// Stick the pixels into the bitmap
+		for y, line := range this.pixels {
+			for x, pixel := range line {
+				// Currently we use the 'mask' bit to set transparency on the
+				// pixel but it will only work with RGBA32 - for other types
+				// of image we'll need to create a separate mask for the bitmap
+				color := pixel.color
+				if pixel.mask {
+					color.A = 0.0
+				}
+				if err := bitmap.PaintPixel(color, gopi.Point{float32(x), float32(y)}); err != nil {
+					return err
+				}
 			}
 		}
-	}
+	*/
 
 	// Success
 	return nil

@@ -91,7 +91,22 @@ func (this *bitmap) FillRectToColor(color gopi.Color, origin gopi.Point, size go
 
 func (this *bitmap) PaintPixel(color gopi.Color, origin gopi.Point) error {
 	this.log.Debug2("<graphics.surfacemanager>PaintPixel{ color=%v origin=%v }", color, origin)
-	return gopi.ErrNotImplemented
+
+	// Check x and y are within bounds
+	x, y := int32(origin.X), int32(origin.Y)
+	if x < 0 || y < 0 || uint32(x) >= this.size.W || uint32(y) >= this.size.H {
+		return gopi.ErrBadParameter
+	}
+	// Create data
+	data := color_to_bytes(color, this.image_type)
+	ptr := uintptr(unsafe.Pointer(&data[0]))
+	rect := rpi.DX_NewRect(x, y, 1, 1)
+	if err := rpi.DX_ResourceWriteData(this.handle, this.image_type, uint32(len(data)), ptr, rect); err != nil {
+		return err
+	}
+
+	// Return success
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
