@@ -38,7 +38,15 @@ type manager struct {
 type sprite struct {
 	name       string
 	image_type gopi.SurfaceFlags
-	size       gopi.Size
+	pixels     [][]*pixel
+	hx, hy     int
+	bitmap     gopi.Bitmap
+}
+
+type pixel struct {
+	color   gopi.Color
+	hotspot bool
+	mask    bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,11 +54,23 @@ type sprite struct {
 
 const (
 	LINESTATE_INIT = iota
+	LINESTATE_DATA
 )
 
 var (
 	REGEXP_SPRITE_NAME = regexp.MustCompile("^Name:\\s*([A-Za-z0-9\\-_]+)$")
 	REGEXP_SPRITE_TYPE = regexp.MustCompile("^Type:\\s*([A-Za-z0-9_]+)$")
+	REGEXP_SPRITE_DATA = regexp.MustCompile("^\\s*([A-Za-z0-9\\.\\-]+)\\s*$")
+)
+
+var (
+	PIXEL_MAP = map[rune]pixel{
+		'b': pixel{gopi.ColorBlack, false, false},
+		'B': pixel{gopi.ColorBlack, true, false},
+		'w': pixel{gopi.ColorWhite, false, false},
+		'W': pixel{gopi.ColorWhite, true, false},
+		'.': pixel{gopi.ColorBlack, false, true},
+	}
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,35 +145,65 @@ func (this *manager) OpenSprites(handle io.Reader) ([]gopi.Sprite, error) {
 	scanner := bufio.NewScanner(handle)
 	state := LINESTATE_INIT
 	sprites := make([]gopi.Sprite, 0)
-	sprite := new(sprite)
+	sprite_ := new(sprite)
+	linen := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		linen += 1
 		switch state {
 		case LINESTATE_INIT:
-			// Ignore comments
-			if strings.HasPrefix(line, "//") {
+			// Ignore comments, spaces
+			if strings.HasPrefix(line, "//") || len(line) == 0 {
 				continue
 			} else if match := REGEXP_SPRITE_NAME.FindStringSubmatch(line); len(match) > 1 {
-				sprite.name = match[1]
+				sprite_.name = match[1]
 			} else if match := REGEXP_SPRITE_TYPE.FindStringSubmatch(line); len(match) > 1 {
 				if image_type := image_type_from(match[1]); image_type == 0 {
 					return nil, fmt.Errorf("Invalid image type: %v", match[1])
 				} else {
-					sprite.image_type = image_type
+					sprite_.image_type = image_type
 				}
+			} else if match := REGEXP_SPRITE_DATA.FindStringSubmatch(line); len(match) > 1 {
+				if err := sprite_.append(line, linen); err != nil {
+					return nil, err
+				}
+				state = LINESTATE_DATA
 			} else {
-				fmt.Println(line)
+				return nil, fmt.Errorf("Syntax error on line %v", linen)
+			}
+		case LINESTATE_DATA:
+			if match := REGEXP_SPRITE_DATA.FindStringSubmatch(line); len(match) > 1 {
+				if err := sprite_.append(line, linen); err != nil {
+					return nil, err
+				}
+			} else if strings.HasPrefix(line, "//") || len(line) == 0 {
+				// Eject and next sprite
+				sprites = append(sprites, sprite_)
+				sprite_ = new(sprite)
+			} else {
+				return nil, fmt.Errorf("Syntax error on line %v", linen)
 			}
 		default:
 			return nil, gopi.ErrAppError
 		}
 	}
+
 	// Add on the last sprite if not nil
-	if sprite != nil {
-		sprites = append(sprites, sprite)
+	if sprite_ != nil && sprite_.Size() != gopi.ZeroSize {
+		sprites = append(sprites, sprite_)
+		sprite_ = nil
 	}
 
-	fmt.Println(sprites)
+	// For each sprite, create the bitmaps
+	for _, sprite_ := range sprites {
+		if err := sprite_.(*sprite).create(this.graphics); err != nil {
+			return nil, err
+		} else {
+			// TODO: Add sprites to array of sprites, making sure
+			// the names are unique
+			fmt.Println(sprite_)
+		}
+	}
 
 	// Return all sprites
 	return sprites, nil

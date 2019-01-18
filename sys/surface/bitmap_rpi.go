@@ -55,8 +55,8 @@ func (this *bitmap) ClearToColor(c gopi.Color) error {
 	return nil
 }
 
-func (this *bitmap) FillRectToColor(origin gopi.Point, size gopi.Size, color gopi.Color) error {
-	this.log.Debug2("<graphics.surfacemanager>FillRectToColor{ origin=%v size=%v color=%v }", origin, size, color)
+func (this *bitmap) FillRectToColor(color gopi.Color, origin gopi.Point, size gopi.Size) error {
+	this.log.Debug2("<graphics.surfacemanager>FillRectToColor{ color=%v origin=%v size=%v }", color, origin, size)
 
 	// Calculate the intersection between the the rectangle and the surface frame
 	// If width or height is zero there is no intersection to return error
@@ -87,6 +87,11 @@ func (this *bitmap) FillRectToColor(origin gopi.Point, size gopi.Size, color gop
 		}
 	}
 	return nil
+}
+
+func (this *bitmap) PaintPixel(color gopi.Color, origin gopi.Point) error {
+	this.log.Debug2("<graphics.surfacemanager>PaintPixel{ color=%v origin=%v }", color, origin)
+	return gopi.ErrNotImplemented
 }
 
 ////////////////////////////////////////////////////////////////////////////////
