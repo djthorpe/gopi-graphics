@@ -12,7 +12,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -26,36 +25,38 @@ import (
 	_ "github.com/djthorpe/gopi/sys/logger"
 )
 
-func FilterFiles(manager gopi.SpriteManager, path string, info os.FileInfo) bool {
-	if info.IsDir() {
-		// Recurse into subfolders
-		return true
-	}
-	if filepath.Ext(path) == ".sprite" {
-		return true
+func CreateCursor(gfx gopi.SurfaceManager, userInfo interface{}) error {
+	cursor := userInfo.(gopi.Sprite)
+	if _, err := gfx.CreateSurfaceWithBitmap(cursor, gopi.SURFACE_FLAG_NONE, 1.0, gopi.SURFACE_LAYER_DEFAULT, gopi.Point{1, 1}, gopi.ZeroSize); err != nil {
+		return err
 	} else {
-		return false
+		return nil
 	}
 }
 
-func Main(app *gopi.AppInstance, done chan<- struct{}) error {
-	if path, exists := app.AppFlags.GetString("sprites.path"); exists == false {
-		return fmt.Errorf("Missing -sprites.path argument")
-	} else if sprites, ok := app.ModuleInstance("graphics/sprites").(gopi.SpriteManager); ok == false {
-		return fmt.Errorf("Invalid graphics/sprites component")
-	} else if err := sprites.OpenSpritesAtPath(path, FilterFiles); err != nil {
-		return err
-	} else {
-		if sprite := sprites.Sprites("pointer_nw"); len(sprite) == 1 {
-			app.Graphics.Do(func(gfx gopi.SurfaceManager) error {
-				if _, err := gfx.CreateSurfaceWithBitmap(sprite[0], 0, 1.0, 67, gopi.Point{1, 1}, gopi.ZeroSize); err != nil {
-					return err
-				} else {
-					return nil
-				}
-			})
+func Background(app *gopi.AppInstance, start chan<- struct{}, stop <-chan struct{}) error {
+	if sprite := app.Sprites.Sprites("pointer_nw"); len(sprite) == 1 {
+		if err := app.Graphics.Do(CreateCursor, sprite[0]); err != nil {
+			return err
 		}
 	}
+
+	// Now run the program
+	start <- gopi.DONE
+
+FOR_LOOP:
+	for {
+		select {
+		case <-stop:
+			break FOR_LOOP
+		}
+	}
+
+	// Finished
+	return nil
+}
+
+func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 	fmt.Println("Waiting for CTRL+C")
 	app.WaitForSignal()
@@ -65,9 +66,8 @@ func Main(app *gopi.AppInstance, done chan<- struct{}) error {
 
 func main() {
 	// Create the configuration
-	config := gopi.NewAppConfig("graphics/sprites")
-	config.AppFlags.FlagString("sprites.path", "", "Path for sprites")
+	config := gopi.NewAppConfig("sprites")
 
 	// Run the command line tool
-	os.Exit(gopi.CommandLineTool2(config, Main))
+	os.Exit(gopi.CommandLineTool2(config, Main, Background))
 }

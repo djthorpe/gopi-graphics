@@ -13,6 +13,7 @@ package surface
 
 import (
 	"fmt"
+	"image"
 	"unsafe"
 
 	// Frameworks
@@ -107,6 +108,11 @@ func (this *bitmap) PaintPixel(color gopi.Color, origin gopi.Point) error {
 
 	// Return success
 	return nil
+}
+
+func (this *bitmap) PaintImage(image image.Image, origin gopi.Point, size gopi.Size) error {
+	this.log.Debug2("<graphics.surfacemanager>PaintImage{ image=%v origin=%v size=%v }", image, origin, size)
+	return gopi.ErrNotImplemented
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -125,14 +125,14 @@ func (this *manager) Close() error {
 	}
 
 	// Free Surfaces
-	if err := this.Do(func(gopi.SurfaceManager) error {
+	if err := this.Do(func(gopi.SurfaceManager, interface{}) error {
 		for _, surface := range this.surfaces {
 			if err := this.DestroySurface(surface); err != nil {
 				return err
 			}
 		}
 		return nil
-	}); err != nil {
+	}, nil); err != nil {
 		return err
 	}
 
@@ -452,12 +452,11 @@ func (this *manager) DestroyNativeSurface(native *nativesurface) error {
 // BITMAPS
 
 func (this *manager) CreateBitmap(flags gopi.SurfaceFlags, size gopi.Size) (gopi.Bitmap, error) {
+	flags = gopi.SURFACE_FLAG_BITMAP | flags.Config() | flags.Mod()
 	this.log.Debug2("<graphics.surfacemanager>CreateBitmap{ flags=%v size=%v }", flags, size)
 
 	// Check parameters
-	if flags.Type() != gopi.SURFACE_FLAG_BITMAP {
-		return nil, gopi.ErrBadParameter
-	} else if size.W <= 0.0 || size.H <= 0.0 {
+	if size.W <= 0.0 || size.H <= 0.0 {
 		return nil, gopi.ErrBadParameter
 	}
 
@@ -465,7 +464,7 @@ func (this *manager) CreateBitmap(flags gopi.SurfaceFlags, size gopi.Size) (gopi
 	b := &bitmap{
 		log:   this.log,
 		size:  rpi.DX_Size{uint32(size.W), uint32(size.H)},
-		flags: gopi.SURFACE_FLAG_BITMAP | flags.Config(),
+		flags: flags,
 	}
 	switch flags.Config() {
 	case gopi.SURFACE_FLAG_RGBA32:
@@ -560,7 +559,7 @@ func size_from_bitmap(bitmap gopi.Bitmap, size gopi.Size) gopi.Size {
 ////////////////////////////////////////////////////////////////////////////////
 // UPDATES
 
-func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
+func (this *manager) Do(callback gopi.SurfaceManagerCallback, userInfo interface{}) error {
 	if this.handle == nil {
 		return gopi.ErrBadParameter
 	}
@@ -576,12 +575,13 @@ func (this *manager) Do(callback gopi.SurfaceManagerCallback) error {
 	} else {
 		this.update = update
 		defer func() {
+			this.log.Debug2("DX_UpdateSubmitSync")
 			if rpi.DX_UpdateSubmitSync(update); err != nil {
 				this.log.Warn("Do: %v", err)
 			}
 			this.update = 0
 		}()
-		if err := callback(this); err != nil {
+		if err := callback(this, userInfo); err != nil {
 			return err
 		}
 	}

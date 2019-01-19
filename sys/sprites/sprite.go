@@ -11,6 +11,7 @@ package sprites
 
 import (
 	"fmt"
+	"image"
 
 	// Frameworks
 	"github.com/djthorpe/gopi"
@@ -58,6 +59,14 @@ func (this *sprite) FillRectToColor(c gopi.Color, o gopi.Point, s gopi.Size) err
 func (this *sprite) PaintPixel(c gopi.Color, o gopi.Point) error {
 	if this.bitmap != nil {
 		return this.bitmap.PaintPixel(c, o)
+	} else {
+		return gopi.ErrAppError
+	}
+}
+
+func (this *sprite) PaintImage(i image.Image, o gopi.Point, s gopi.Size) error {
+	if this.bitmap != nil {
+		return this.bitmap.PaintImage(i, o, s)
 	} else {
 		return gopi.ErrAppError
 	}
@@ -134,9 +143,8 @@ func (this *sprite) create(gfx gopi.SurfaceManager) error {
 }
 
 func (this *sprite) FillBitmap(bitmap gopi.Bitmap) error {
-
 	// Clear bitmap to transparent/black
-	if err := bitmap.ClearToColor(gopi.ColorWhite); err != nil {
+	if err := bitmap.ClearToColor(gopi.ColorRed); err != nil {
 		return err
 	}
 	/*
